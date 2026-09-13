@@ -1,0 +1,7 @@
+{
+  "name": "Flipped Classroom Blended Learning Platform",
+  "description": "A comprehensive flipped classroom blended learning platform for Admin, Teacher, and Student roles with pre-class lectures, in-class physical sessions, quizzes, attendance, assignments, grading, and analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

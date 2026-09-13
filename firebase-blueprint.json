@@ -1,0 +1,363 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User accounts for students, teachers, and university administrators",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["STUDENT", "TEACHER", "ADMIN"] },
+        "department": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+        "rollNo": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "phone": { "type": "string" },
+        "semester": { "type": "number" },
+        "section": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "fullName", "email", "role"]
+    },
+    "Course": {
+      "title": "Course",
+      "description": "Academic course offering flipped classroom learning",
+      "type": "object",
+      "properties": {
+        "courseId": { "type": "string" },
+        "code": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "department": { "type": "string" },
+        "semester": { "type": "string" },
+        "credits": { "type": "number" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "ARCHIVED"] },
+        "enrolledStudentsCount": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["courseId", "code", "title"]
+    },
+    "Module": {
+      "title": "Module",
+      "description": "Course syllabus chapter/module",
+      "type": "object",
+      "properties": {
+        "moduleId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "orderIndex": { "type": "number" },
+        "isPublished": { "type": "boolean" },
+        "lessonsCount": { "type": "number" }
+      },
+      "required": ["moduleId", "courseId", "title"]
+    },
+    "Lesson": {
+      "title": "Lesson",
+      "description": "Specific lesson inside a course module",
+      "type": "object",
+      "properties": {
+        "lessonId": { "type": "string" },
+        "moduleId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "orderIndex": { "type": "number" },
+        "durationMinutes": { "type": "number" }
+      },
+      "required": ["lessonId", "moduleId", "courseId", "title"]
+    },
+    "VideoLecture": {
+      "title": "VideoLecture",
+      "description": "Pre-class recorded video lecture for flipped preparation",
+      "type": "object",
+      "properties": {
+        "videoId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "moduleId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "durationSec": { "type": "number" },
+        "thumbnailUrl": { "type": "string" },
+        "uploadedAt": { "type": "string" }
+      },
+      "required": ["videoId", "courseId", "moduleId", "title", "videoUrl"]
+    },
+    "LearningMaterial": {
+      "title": "LearningMaterial",
+      "description": "Pre-reading slides, lecture notes, and study handouts",
+      "type": "object",
+      "properties": {
+        "materialId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "moduleId": { "type": "string" },
+        "title": { "type": "string" },
+        "fileType": { "type": "string" },
+        "fileSize": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "downloadsCount": { "type": "number" }
+      },
+      "required": ["materialId", "courseId", "title"]
+    },
+    "VideoProgress": {
+      "title": "VideoProgress",
+      "description": "Student video lecture watch telemetry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "videoId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "watchedSec": { "type": "number" },
+        "percent": { "type": "number" },
+        "completed": { "type": "boolean" },
+        "lastPosition": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "studentId", "videoId", "courseId"]
+    },
+    "MaterialProgress": {
+      "title": "MaterialProgress",
+      "description": "Student material reading completion record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "materialId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "studentId", "materialId", "courseId"]
+    },
+    "Quiz": {
+      "title": "Quiz",
+      "description": "Pre-class readiness quiz or post-class mastery assessment",
+      "type": "object",
+      "properties": {
+        "quizId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "moduleId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["PRE", "POST"] },
+        "durationMin": { "type": "number" },
+        "totalMarks": { "type": "number" },
+        "passPercentage": { "type": "number" },
+        "isPublished": { "type": "boolean" }
+      },
+      "required": ["quizId", "courseId", "title", "type"]
+    },
+    "QuizAttempt": {
+      "title": "QuizAttempt",
+      "description": "Submitted student quiz answers and calculated scores",
+      "type": "object",
+      "properties": {
+        "attemptId": { "type": "string" },
+        "quizId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "courseId": { "type": "string" },
+        "score": { "type": "number" },
+        "totalMarks": { "type": "number" },
+        "percentage": { "type": "number" },
+        "status": { "type": "string" },
+        "submittedAt": { "type": "string" }
+      },
+      "required": ["attemptId", "quizId", "studentId", "score"]
+    },
+    "PhysicalClass": {
+      "title": "PhysicalClass",
+      "description": "Scheduled in-person interactive session or lab",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "topic": { "type": "string" },
+        "agenda": { "type": "string" },
+        "classDate": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "room": { "type": "string" },
+        "status": { "type": "string", "enum": ["SCHEDULED", "ONGOING", "COMPLETED", "CANCELLED"] }
+      },
+      "required": ["classId", "courseId", "topic", "classDate", "room"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Individual student attendance status in a physical session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "classId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "rollNo": { "type": "string" },
+        "courseId": { "type": "string" },
+        "status": { "type": "string", "enum": ["PRESENT", "ABSENT", "LATE", "EXCUSED"] },
+        "markedAt": { "type": "string" },
+        "remarks": { "type": "string" }
+      },
+      "required": ["id", "classId", "studentId", "status"]
+    },
+    "Assignment": {
+      "title": "Assignment",
+      "description": "Academic assignment with rubrics and deadlines",
+      "type": "object",
+      "properties": {
+        "assignmentId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "moduleId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "deadline": { "type": "string" },
+        "maxMarks": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["assignmentId", "courseId", "title", "deadline", "maxMarks"]
+    },
+    "Submission": {
+      "title": "Submission",
+      "description": "Student work submission with grades and evaluation rubrics",
+      "type": "object",
+      "properties": {
+        "submissionId": { "type": "string" },
+        "assignmentId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "courseId": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileSize": { "type": "string" },
+        "textAnswer": { "type": "string" },
+        "submittedAt": { "type": "string" },
+        "isLate": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["SUBMITTED", "GRADED"] },
+        "marksObtained": { "type": "number" },
+        "letterGrade": { "type": "string" },
+        "generalFeedback": { "type": "string" },
+        "gradedAt": { "type": "string" },
+        "gradedBy": { "type": "string" }
+      },
+      "required": ["submissionId", "assignmentId", "studentId", "status"]
+    },
+    "FeedbackMessage": {
+      "title": "FeedbackMessage",
+      "description": "Discussion message or feedback between teacher and student",
+      "type": "object",
+      "properties": {
+        "feedbackId": { "type": "string" },
+        "submissionId": { "type": "string" },
+        "fromUserId": { "type": "string" },
+        "fromUserName": { "type": "string" },
+        "fromRole": { "type": "string" },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["feedbackId", "submissionId", "fromUserId", "message"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Security and administrative audit trail log",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "role": { "type": "string" },
+        "action": { "type": "string" },
+        "entity": { "type": "string" },
+        "entityId": { "type": "string" },
+        "ip": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["logId", "userId", "action", "createdAt"]
+    },
+    "Department": {
+      "title": "Department",
+      "description": "University academic department",
+      "type": "object",
+      "properties": {
+        "deptId": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "programsCount": { "type": "number" },
+        "coursesCount": { "type": "number" }
+      },
+      "required": ["deptId", "name", "code"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile collection"
+    },
+    "/courses/{courseId}": {
+      "schema": { "$ref": "#/entities/Course" },
+      "description": "Academic course catalog"
+    },
+    "/modules/{moduleId}": {
+      "schema": { "$ref": "#/entities/Module" },
+      "description": "Course modules"
+    },
+    "/lessons/{lessonId}": {
+      "schema": { "$ref": "#/entities/Lesson" },
+      "description": "Individual lessons"
+    },
+    "/videoLectures/{videoId}": {
+      "schema": { "$ref": "#/entities/VideoLecture" },
+      "description": "Pre-class recorded video lectures"
+    },
+    "/learningMaterials/{materialId}": {
+      "schema": { "$ref": "#/entities/LearningMaterial" },
+      "description": "Study handouts and slides"
+    },
+    "/videoProgress/{progressId}": {
+      "schema": { "$ref": "#/entities/VideoProgress" },
+      "description": "Student video watch progress"
+    },
+    "/materialProgress/{progressId}": {
+      "schema": { "$ref": "#/entities/MaterialProgress" },
+      "description": "Student material reading records"
+    },
+    "/quizzes/{quizId}": {
+      "schema": { "$ref": "#/entities/Quiz" },
+      "description": "Pre and post quizzes"
+    },
+    "/quizAttempts/{attemptId}": {
+      "schema": { "$ref": "#/entities/QuizAttempt" },
+      "description": "Quiz submissions and grades"
+    },
+    "/physicalClasses/{classId}": {
+      "schema": { "$ref": "#/entities/PhysicalClass" },
+      "description": "Scheduled in-person laboratory and classroom sessions"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": { "$ref": "#/entities/AttendanceRecord" },
+      "description": "Session attendance records"
+    },
+    "/assignments/{assignmentId}": {
+      "schema": { "$ref": "#/entities/Assignment" },
+      "description": "Course assignments"
+    },
+    "/submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/Submission" },
+      "description": "Student assignment submissions and evaluations"
+    },
+    "/feedback/{feedbackId}": {
+      "schema": { "$ref": "#/entities/FeedbackMessage" },
+      "description": "Assignment feedback thread"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Audit trails"
+    },
+    "/departments/{deptId}": {
+      "schema": { "$ref": "#/entities/Department" },
+      "description": "University departments"
+    }
+  }
+}
