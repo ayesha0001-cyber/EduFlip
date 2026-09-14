@@ -41,10 +41,9 @@ export const AuthModal: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [signUpEmail, setSignUpEmail] = useState('');
   const [signUpPassword, setSignUpPassword] = useState('');
-  const [department, setDepartment] = useState('CSE');
+  const [department, setDepartment] = useState('Educational Technology and Engineering');
   const [rollNo, setRollNo] = useState('');
   const [semester, setSemester] = useState(6);
-  const [section, setSection] = useState('A');
   const [designation, setDesignation] = useState('Assistant Professor');
   const [employeeId, setEmployeeId] = useState('');
 
@@ -95,7 +94,7 @@ export const AuthModal: React.FC = () => {
       fullName: demo.name,
       email: demo.email,
       role: demo.role,
-      department: 'CSE',
+      department: 'Educational Technology and Engineering',
       status: 'ACTIVE',
       rollNo: demo.role === 'STUDENT' ? 'CS-2023-042' : undefined,
       employeeId: demo.role !== 'STUDENT' ? 'EMP-882' : undefined,
@@ -142,8 +141,7 @@ export const AuthModal: React.FC = () => {
         status: 'ACTIVE',
         rollNo: selectedRole === 'STUDENT' ? rollNo.trim() || `CS-2023-${Math.floor(100 + Math.random() * 900)}` : undefined,
         employeeId: selectedRole !== 'STUDENT' ? employeeId.trim() || `EMP-${Math.floor(100 + Math.random() * 900)}` : undefined,
-        semester: selectedRole === 'STUDENT' ? semester : undefined,
-        section: selectedRole === 'STUDENT' ? section : undefined
+        semester: selectedRole === 'STUDENT' ? semester : undefined
       };
 
       await signUp(newUserPayload);
@@ -454,10 +452,11 @@ export const AuthModal: React.FC = () => {
                       onChange={(e) => setDepartment(e.target.value)}
                       className="w-full px-3 py-1.5 text-xs rounded-xl border border-[#E2E8F0] focus:ring-2 focus:ring-[#0F766E] focus:outline-none bg-white"
                     >
-                      <option value="CSE">Computer Science & Engineering (CSE)</option>
-                      <option value="EEE">Electrical & Electronic Engineering (EEE)</option>
-                      <option value="BBA">School of Business Administration (BBA)</option>
-                      <option value="ME">Mechanical Engineering (ME)</option>
+                      <option value="Educational Technology and Engineering">Educational Technology and Engineering</option>
+                      <option value="IoT and Robotics Engineering">IoT and Robotics Engineering</option>
+                      <option value="Cyber Security Engineering">Cyber Security Engineering</option>
+                      <option value="Data Science and Engineering">Data Science and Engineering</option>
+                      <option value="Software Engineering">Software Engineering</option>
                     </select>
                   </div>
 
@@ -481,7 +480,7 @@ export const AuthModal: React.FC = () => {
 
                 {/* Role Specific Fields */}
                 {selectedRole === 'STUDENT' && (
-                  <div className="grid grid-cols-3 gap-2.5 p-3 rounded-xl bg-teal-50/60 border border-teal-100">
+                  <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-teal-50/60 border border-teal-100">
                     <div>
                       <label className="block text-[10px] font-semibold text-[#0F766E] mb-1">
                         Student ID / Roll No
@@ -491,7 +490,7 @@ export const AuthModal: React.FC = () => {
                         placeholder="e.g. CS-2023-042"
                         value={rollNo}
                         onChange={(e) => setRollNo(e.target.value)}
-                        className="w-full px-2.5 py-1 text-xs rounded-lg border border-teal-200 bg-white focus:outline-none"
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-teal-200 bg-white focus:outline-none"
                       />
                     </div>
 
@@ -502,28 +501,13 @@ export const AuthModal: React.FC = () => {
                       <select
                         value={semester}
                         onChange={(e) => setSemester(Number(e.target.value))}
-                        className="w-full px-2.5 py-1 text-xs rounded-lg border border-teal-200 bg-white focus:outline-none"
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-teal-200 bg-white focus:outline-none"
                       >
                         {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
                           <option key={s} value={s}>
                             Semester {s}
                           </option>
                         ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-semibold text-[#0F766E] mb-1">
-                        Section
-                      </label>
-                      <select
-                        value={section}
-                        onChange={(e) => setSection(e.target.value)}
-                        className="w-full px-2.5 py-1 text-xs rounded-lg border border-teal-200 bg-white focus:outline-none"
-                      >
-                        <option value="A">Section A</option>
-                        <option value="B">Section B</option>
-                        <option value="C">Section C</option>
                       </select>
                     </div>
                   </div>

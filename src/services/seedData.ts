@@ -16,24 +16,38 @@ import type {
 // Default mock data removed per user instruction. All data is now driven in real-time from Firestore.
 export const INITIAL_DEPARTMENTS: Department[] = [
   {
-    deptId: 'dept-cse',
-    name: 'Computer Science & Software Engineering',
-    code: 'CSE',
-    programsCount: 0,
+    deptId: 'dept-edte',
+    name: 'Educational Technology and Engineering',
+    code: 'EdTE',
+    programsCount: 1,
     coursesCount: 0
   },
   {
-    deptId: 'dept-eee',
-    name: 'Electrical & Electronic Engineering',
-    code: 'EEE',
-    programsCount: 0,
+    deptId: 'dept-ire',
+    name: 'IoT and Robotics Engineering',
+    code: 'IRE',
+    programsCount: 1,
     coursesCount: 0
   },
   {
-    deptId: 'dept-bba',
-    name: 'Business Administration',
-    code: 'BBA',
-    programsCount: 0,
+    deptId: 'dept-cyse',
+    name: 'Cyber Security Engineering',
+    code: 'CYSE',
+    programsCount: 1,
+    coursesCount: 0
+  },
+  {
+    deptId: 'dept-dse',
+    name: 'Data Science and Engineering',
+    code: 'DSE',
+    programsCount: 1,
+    coursesCount: 0
+  },
+  {
+    deptId: 'dept-swe',
+    name: 'Software Engineering',
+    code: 'SWE',
+    programsCount: 1,
     coursesCount: 0
   }
 ];

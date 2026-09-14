@@ -13,7 +13,7 @@ export const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ isOpen, on
   const [code, setCode] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [department, setDepartment] = useState('CSE');
+  const [department, setDepartment] = useState('Educational Technology and Engineering');
   const [semester, setSemester] = useState('Fall 2026');
   const [credits, setCredits] = useState(3);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -136,11 +136,11 @@ export const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ isOpen, on
                 onChange={(e) => setDepartment(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0F766E]/20 focus:border-[#0F766E]"
               >
-                <option value="CSE">CSE - Computer Science & Engineering</option>
-                <option value="SWE">SWE - Software Engineering</option>
-                <option value="EEE">EEE - Electrical & Electronic</option>
-                <option value="BBA">BBA - Business Administration</option>
-                <option value="CE">CE - Civil Engineering</option>
+                <option value="Educational Technology and Engineering">Educational Technology and Engineering</option>
+                <option value="IoT and Robotics Engineering">IoT and Robotics Engineering</option>
+                <option value="Cyber Security Engineering">Cyber Security Engineering</option>
+                <option value="Data Science and Engineering">Data Science and Engineering</option>
+                <option value="Software Engineering">Software Engineering</option>
               </select>
             </div>
             <div>

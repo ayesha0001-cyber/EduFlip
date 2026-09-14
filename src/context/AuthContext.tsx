@@ -182,7 +182,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: cleanEmail,
       fullName: cleanEmail === 'ayesha0001@std.uftb.ac.bd' ? 'Dr. Ayesha Rahman' : cleanEmail.split('@')[0],
       role: assignedRole,
-      department: 'CSE',
+      department: 'Educational Technology and Engineering',
       status: 'ACTIVE',
       employeeId: assignedRole === 'ADMIN' ? 'EMP-ADM-01' : assignedRole === 'TEACHER' ? 'EMP-FAC-01' : undefined,
       rollNo: assignedRole === 'STUDENT' ? `CS-2026-${Math.floor(100 + Math.random() * 900)}` : undefined
@@ -250,7 +250,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: emails[targetRole],
       fullName: names[targetRole],
       role: targetRole,
-      department: 'CSE',
+      department: 'Educational Technology and Engineering',
       status: 'ACTIVE',
       employeeId: targetRole !== 'STUDENT' ? `EMP-${targetRole.slice(0, 3)}-01` : undefined,
       rollNo: targetRole === 'STUDENT' ? 'CS-2026-001' : undefined

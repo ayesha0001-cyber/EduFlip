@@ -25,7 +25,7 @@ export const AdminUsersView: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('STUDENT');
-  const [department, setDepartment] = useState('Computer Science & Engineering');
+  const [department, setDepartment] = useState('Educational Technology and Engineering');
   const [rollNo, setRollNo] = useState('');
 
   useEffect(() => {
@@ -265,12 +265,17 @@ export const AdminUsersView: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-medium text-[#1E3A5F] mb-1">Department</label>
-                <input
-                  type="text"
+                <select
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-xs focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
-                />
+                  className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-xs focus:ring-2 focus:ring-[#0F766E] focus:outline-none bg-white"
+                >
+                  <option value="Educational Technology and Engineering">Educational Technology and Engineering</option>
+                  <option value="IoT and Robotics Engineering">IoT and Robotics Engineering</option>
+                  <option value="Cyber Security Engineering">Cyber Security Engineering</option>
+                  <option value="Data Science and Engineering">Data Science and Engineering</option>
+                  <option value="Software Engineering">Software Engineering</option>
+                </select>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2">
