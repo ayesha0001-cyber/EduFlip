@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { initializeFirestore, type Firestore } from 'firebase/firestore';
 import { getAuth, type Auth } from 'firebase/auth';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 
 // Resolved Firebase configuration (supports Netlify env vars or bundled config)
@@ -27,5 +28,6 @@ export const db: Firestore = initializeFirestore(
 );
 
 export const auth: Auth = getAuth(app);
+export const storage: FirebaseStorage = getStorage(app);
 
 export default app;

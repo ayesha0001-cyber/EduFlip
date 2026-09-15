@@ -26,7 +26,8 @@ import {
   getVideoLectures,
   getVideoProgress,
   getQuizzes,
-  getStudentQuizAttempts
+  getStudentQuizAttempts,
+  subscribeToVideoLectures
 } from '../../services/dataService';
 import type { PhysicalClass, Submission, FeedbackMessage, VideoLecture, Quiz } from '../../types';
 
@@ -83,8 +84,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       }
     });
 
-    // 4. Video & Quiz Progress
-    getVideoLectures(selectedCourse.courseId).then(async (videos) => {
+    // 4. Video & Quiz Progress in Real Time
+    const unsubVideos = subscribeToVideoLectures(selectedCourse.courseId, async (videos) => {
       setHasVideos(videos.length > 0);
       if (videos.length > 0) {
         let total = 0;
@@ -110,6 +111,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
         setQuizScore(null);
       }
     });
+
+    return () => {
+      unsubVideos();
+    };
   }, [selectedCourse, currentUser]);
 
   if (!selectedCourse) {

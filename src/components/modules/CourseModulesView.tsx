@@ -34,15 +34,76 @@ import {
   createModule,
   createLesson,
   addVideoLecture,
+  updateVideoLecture,
   addMaterial,
   deleteMaterial,
   deleteVideoLecture,
-  markMaterialRead
+  markMaterialRead,
+  subscribeToVideoLectures,
+  subscribeToLearningMaterials,
+  subscribeToModules
 } from '../../services/dataService';
+import { saveMediaFile, SAMPLE_LECTURE_PRESETS } from '../../services/mediaStorage';
+import { saveFileToFirestore } from '../../services/firestoreStorage';
 import { VideoPlayerModal } from './VideoPlayerModal';
+import { MaterialViewerModal } from './MaterialViewerModal';
 
 interface CourseModulesViewProps {
   onNavigateToQuiz: () => void;
+}
+
+// Helper: generate video thumbnail frame
+function captureVideoThumbnail(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const fallback = 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&auto=format&fit=crop&q=80';
+    try {
+      const url = URL.createObjectURL(file);
+      const vid = document.createElement('video');
+      vid.preload = 'metadata';
+      vid.muted = true;
+      vid.playsInline = true;
+
+      const timeout = setTimeout(() => {
+        URL.revokeObjectURL(url);
+        resolve(fallback);
+      }, 2500);
+
+      vid.onloadedmetadata = () => {
+        vid.currentTime = Math.min(2, Math.max(0.5, (vid.duration || 2) / 2));
+      };
+
+      vid.onseeked = () => {
+        clearTimeout(timeout);
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 480;
+          canvas.height = 270;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(vid, 0, 0, 480, 270);
+            const thumb = canvas.toDataURL('image/jpeg', 0.65);
+            URL.revokeObjectURL(url);
+            resolve(thumb);
+            return;
+          }
+        } catch {
+          // ignore
+        }
+        URL.revokeObjectURL(url);
+        resolve(fallback);
+      };
+
+      vid.onerror = () => {
+        clearTimeout(timeout);
+        URL.revokeObjectURL(url);
+        resolve(fallback);
+      };
+
+      vid.src = url;
+    } catch {
+      resolve(fallback);
+    }
+  });
 }
 
 export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigateToQuiz }) => {
@@ -54,6 +115,7 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({ 'mod-1': true });
 
   const [activeVideo, setActiveVideo] = useState<VideoLecture | null>(null);
+  const [activeMaterial, setActiveMaterial] = useState<LearningMaterial | null>(null);
 
   // Teacher Modals
   const [showAddModuleModal, setShowAddModuleModal] = useState(false);
@@ -66,17 +128,21 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
 
   // Upload Material Modal state
   const [materialLesson, setMaterialLesson] = useState<Lesson | null>(null);
+  const [selectedMaterialFile, setSelectedMaterialFile] = useState<File | null>(null);
   const [materialTitle, setMaterialTitle] = useState('');
-  const [materialType, setMaterialType] = useState<'SLIDES' | 'PDF' | 'NOTES' | 'CODE'>('SLIDES');
+  const [materialType, setMaterialType] = useState<'SLIDES' | 'PDF' | 'NOTES' | 'CODE'>('PDF');
   const [materialSourceMode, setMaterialSourceMode] = useState<'FILE' | 'URL'>('FILE');
   const [materialUrl, setMaterialUrl] = useState('');
   const [materialFileName, setMaterialFileName] = useState('');
   const [materialFileSize, setMaterialFileSize] = useState(0);
   const [isSavingMaterial, setIsSavingMaterial] = useState(false);
+  const [materialUploadStatus, setMaterialUploadStatus] = useState('');
   const materialFileInputRef = useRef<HTMLInputElement>(null);
 
   // Upload Video Modal state
   const [videoLesson, setVideoLesson] = useState<Lesson | null>(null);
+  const [editingVideoId, setEditingVideoId] = useState<string | null>(null);
+  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
   const [videoTitle, setVideoTitle] = useState('');
   const [videoSourceMode, setVideoSourceMode] = useState<'FILE' | 'URL'>('URL');
   const [videoUrl, setVideoUrl] = useState('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
@@ -84,13 +150,32 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
   const [videoDurationMin, setVideoDurationMin] = useState(15);
   const [videoTranscript, setVideoTranscript] = useState('');
   const [isSavingVideo, setIsSavingVideo] = useState(false);
+  const [videoUploadStatus, setVideoUploadStatus] = useState('');
   const videoFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (selectedCourse) {
-      loadData(selectedCourse.courseId);
-    }
-  }, [selectedCourse]);
+    if (!selectedCourse) return;
+    loadData(selectedCourse.courseId);
+
+    // Subscribe to real-time updates so added videos are immediately available to student accounts
+    const unsubVideos = subscribeToVideoLectures(selectedCourse.courseId, (updatedVideos) => {
+      setVideos(updatedVideos);
+    });
+
+    const unsubMaterials = subscribeToLearningMaterials(selectedCourse.courseId, (updatedMaterials) => {
+      setMaterials(updatedMaterials);
+    });
+
+    const unsubModules = subscribeToModules(selectedCourse.courseId, (updatedModules) => {
+      setModules(updatedModules);
+    });
+
+    return () => {
+      unsubVideos();
+      unsubMaterials();
+      unsubModules();
+    };
+  }, [selectedCourse?.courseId]);
 
   const loadData = async (courseId: string) => {
     const mods = await getModules(courseId);
@@ -150,8 +235,10 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
   // Open Material Modal
   const handleOpenMaterialModal = (lesson: Lesson) => {
     setMaterialLesson(lesson);
-    setMaterialTitle(`${lesson.title} - Slides & Handout`);
-    setMaterialType('SLIDES');
+    setSelectedMaterialFile(null);
+    setMaterialUploadStatus('');
+    setMaterialTitle(`${lesson.title} - Handout & Reading`);
+    setMaterialType('PDF');
     setMaterialSourceMode('FILE');
     setMaterialUrl('');
     setMaterialFileName('');
@@ -161,43 +248,60 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
   const handleMaterialFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setSelectedMaterialFile(file);
     setMaterialFileName(file.name);
     setMaterialFileSize(file.size);
-    if (!materialTitle || materialTitle.includes('Slides & Handout')) {
+    if (!materialTitle || materialTitle.includes('Handout & Reading') || materialTitle.includes('Slides & Handout')) {
       setMaterialTitle(file.name.replace(/\.[^/.]+$/, ''));
     }
     if (file.name.endsWith('.pdf')) setMaterialType('PDF');
     else if (file.name.endsWith('.ppt') || file.name.endsWith('.pptx') || file.name.endsWith('.key')) setMaterialType('SLIDES');
     else if (file.name.endsWith('.md') || file.name.endsWith('.txt') || file.name.endsWith('.docx')) setMaterialType('NOTES');
     else if (file.name.endsWith('.zip') || file.name.endsWith('.js') || file.name.endsWith('.py') || file.name.endsWith('.sql')) setMaterialType('CODE');
-    
-    // Create object URL for client preview & download
-    const blobUrl = URL.createObjectURL(file);
-    setMaterialUrl(blobUrl);
   };
 
   const handleSaveMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!materialLesson || !selectedCourse || !materialTitle.trim()) return;
     setIsSavingMaterial(true);
+    setMaterialUploadStatus('Preparing material...');
     try {
-      const finalUrl = materialUrl.trim() || '#material';
-      const finalSize = materialFileSize > 0 ? materialFileSize : 2400000;
+      let finalUrl = materialUrl.trim();
+      let finalSize = materialFileSize;
+
+      if (materialSourceMode === 'FILE' && selectedMaterialFile) {
+        setMaterialUploadStatus('Saving file permanently to Firebase Store...');
+        const stored = await saveFileToFirestore(
+          selectedMaterialFile,
+          materialTitle.trim(),
+          selectedMaterialFile.type,
+          (msg) => setMaterialUploadStatus(msg)
+        );
+        finalUrl = stored.storageUrl;
+        finalSize = stored.sizeBytes;
+      } else if (!finalUrl) {
+        finalUrl = 'https://example.com/handout.pdf';
+      }
+
       const newMat = await addMaterial({
         lessonId: materialLesson.lessonId,
         courseId: selectedCourse.courseId,
         title: materialTitle.trim(),
         type: materialType,
         url: finalUrl,
-        sizeBytes: finalSize
+        sizeBytes: finalSize > 0 ? finalSize : 102400
       });
-      setMaterials((prev) => [...prev, newMat]);
-      addToast(`Material "${newMat.title}" uploaded and published!`, 'success');
+
+      setMaterials((prev) => [...prev.filter((m) => m.materialId !== newMat.materialId), newMat]);
+      addToast(`Material "${newMat.title}" saved to Firebase Store!`, 'success');
       setMaterialLesson(null);
+      setSelectedMaterialFile(null);
     } catch (err) {
-      addToast('Failed to upload material.', 'error');
+      console.error('Failed to save material:', err);
+      addToast('Failed to upload material to Firebase.', 'error');
     } finally {
       setIsSavingMaterial(false);
+      setMaterialUploadStatus('');
     }
   };
 
@@ -215,13 +319,18 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
   // Open Video Modal
   const handleOpenVideoModal = (lesson: Lesson, existingVideo?: VideoLecture) => {
     setVideoLesson(lesson);
+    setSelectedVideoFile(null);
+    setVideoUploadStatus('');
     if (existingVideo) {
+      setEditingVideoId(existingVideo.videoId);
       setVideoTitle(existingVideo.title);
-      setVideoSourceMode('URL');
+      setVideoSourceMode(existingVideo.url.startsWith('indexeddb://') || existingVideo.url.startsWith('blob:') ? 'FILE' : 'URL');
       setVideoUrl(existingVideo.url);
-      setVideoDurationMin(Math.round(existingVideo.durationSec / 60));
+      setVideoFileName(existingVideo.url.startsWith('indexeddb://') ? 'Saved Local Video File' : '');
+      setVideoDurationMin(Math.round((existingVideo.durationSec || 900) / 60));
       setVideoTranscript(existingVideo.transcript || '');
     } else {
+      setEditingVideoId(null);
       setVideoTitle(`${lesson.title} - Video Lecture`);
       setVideoSourceMode('URL');
       setVideoUrl('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
@@ -234,38 +343,111 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
   const handleVideoFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setSelectedVideoFile(file);
     setVideoFileName(file.name);
     if (!videoTitle || videoTitle.includes('Video Lecture')) {
       setVideoTitle(file.name.replace(/\.[^/.]+$/, ''));
     }
     const blobUrl = URL.createObjectURL(file);
     setVideoUrl(blobUrl);
+
+    // Auto-detect duration from video metadata
+    try {
+      const tempVideo = document.createElement('video');
+      tempVideo.preload = 'metadata';
+      tempVideo.src = blobUrl;
+      tempVideo.onloadedmetadata = () => {
+        if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
+          const detectedMins = Math.max(1, Math.round(tempVideo.duration / 60));
+          setVideoDurationMin(detectedMins);
+        }
+      };
+    } catch {
+      // ignore
+    }
   };
 
   const handleSaveVideo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!videoLesson || !selectedCourse || !videoTitle.trim()) return;
     setIsSavingVideo(true);
+    setVideoUploadStatus('Preparing video lecture...');
     try {
-      const finalUrl = videoUrl.trim() || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+      let finalUrl = videoUrl.trim();
+      let finalThumbnail = 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&auto=format&fit=crop&q=80';
+
+      // If user uploaded a video file, persist it directly to persistent browser IndexedDB
+      if (videoSourceMode === 'FILE' && selectedVideoFile) {
+        setVideoUploadStatus(`Capturing video preview frame...`);
+        try {
+          finalThumbnail = await captureVideoThumbnail(selectedVideoFile);
+        } catch {
+          // fallback
+        }
+
+        setVideoUploadStatus(`Saving ${selectedVideoFile.name} to persistent storage...`);
+        const storedMedia = await saveMediaFile(
+          selectedVideoFile,
+          'video',
+          `${selectedCourse.courseId}_${videoLesson.lessonId}_${selectedVideoFile.name}`,
+          (statusMsg) => setVideoUploadStatus(statusMsg)
+        );
+        finalUrl = storedMedia.url;
+        addToast(`Video "${videoTitle.trim()}" saved to persistent media storage!`, 'success');
+      } else if (!finalUrl) {
+        finalUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+      }
+
       const durationSec = (videoDurationMin || 15) * 60;
-      const newVid = await addVideoLecture({
-        lessonId: videoLesson.lessonId,
-        courseId: selectedCourse.courseId,
-        title: videoTitle.trim(),
-        url: finalUrl,
-        durationSec,
-        thumbnailUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&auto=format&fit=crop&q=80',
-        uploadedBy: currentUser?.fullName || 'Faculty Instructor',
-        transcript: videoTranscript.trim() || undefined
-      });
-      setVideos((prev) => [...prev.filter((v) => v.lessonId !== videoLesson.lessonId), newVid]);
-      addToast(`Video lecture attached to "${videoLesson.title}"!`, 'success');
+      const cleanTranscript = videoTranscript.trim() || undefined;
+
+      if (editingVideoId) {
+        setVideoUploadStatus('Updating lecture record...');
+        await updateVideoLecture(editingVideoId, {
+          title: videoTitle.trim(),
+          url: finalUrl,
+          durationSec,
+          thumbnailUrl: finalThumbnail,
+          transcript: cleanTranscript
+        });
+        const updatedVid: VideoLecture = {
+          videoId: editingVideoId,
+          lessonId: videoLesson.lessonId,
+          courseId: selectedCourse.courseId,
+          title: videoTitle.trim(),
+          url: finalUrl,
+          durationSec,
+          thumbnailUrl: finalThumbnail,
+          uploadedBy: currentUser?.fullName || 'Faculty Instructor',
+          transcript: cleanTranscript
+        };
+        setVideos((prev) => prev.map((v) => (v.videoId === editingVideoId ? updatedVid : v)));
+        addToast(`Video lecture updated successfully!`, 'success');
+      } else {
+        setVideoUploadStatus('Publishing video to course module...');
+        const newVid = await addVideoLecture({
+          lessonId: videoLesson.lessonId,
+          courseId: selectedCourse.courseId,
+          title: videoTitle.trim(),
+          url: finalUrl,
+          durationSec,
+          thumbnailUrl: finalThumbnail,
+          uploadedBy: currentUser?.fullName || 'Faculty Instructor',
+          transcript: cleanTranscript
+        });
+        setVideos((prev) => [...prev.filter((v) => v.lessonId !== videoLesson.lessonId), newVid]);
+        addToast(`Video lecture attached to "${videoLesson.title}"!`, 'success');
+      }
+
       setVideoLesson(null);
+      setSelectedVideoFile(null);
+      setEditingVideoId(null);
     } catch (err) {
-      addToast('Failed to attach video lecture.', 'error');
+      console.error('Failed to save video:', err);
+      addToast('Failed to save video lecture. Please try again.', 'error');
     } finally {
       setIsSavingVideo(false);
+      setVideoUploadStatus('');
     }
   };
 
@@ -442,7 +624,7 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
                 <div className="p-5 pt-0 border-t border-[#E2E8F0] divide-y divide-slate-100">
                   {/* Lessons List */}
                   {lessons.map((lesson, lIdx) => {
-                    const video = videos.find((v) => v.lessonId === lesson.lessonId);
+                    const video = videos.find((v) => v.lessonId === lesson.lessonId || (lesson.videoId && v.videoId === lesson.videoId));
                     const lessonMaterials = materials.filter((m) => m.lessonId === lesson.lessonId);
 
                     return (
@@ -569,14 +751,15 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
                                   return (
                                     <div
                                       key={mat.materialId}
-                                      className="p-3 rounded-xl border border-[#E2E8F0] bg-white hover:border-slate-300 transition flex items-center justify-between gap-3 shadow-2xs"
+                                      onClick={() => setActiveMaterial(mat)}
+                                      className="p-3 rounded-xl border border-[#E2E8F0] bg-white hover:border-teal-300 hover:shadow-xs transition flex items-center justify-between gap-3 shadow-2xs cursor-pointer group"
                                     >
                                       <div className="flex items-center gap-2.5 min-w-0">
-                                        <div className="w-8 h-8 rounded-lg bg-[#EEF3F7] text-[#1E3A5F] flex items-center justify-center shrink-0">
+                                        <div className="w-8 h-8 rounded-lg bg-[#EEF3F7] group-hover:bg-teal-50 text-[#1E3A5F] group-hover:text-[#0F766E] flex items-center justify-center shrink-0 transition">
                                           <Icon className="w-4 h-4 text-[#0F766E]" />
                                         </div>
                                         <div className="min-w-0">
-                                          <div className="font-semibold text-xs text-[#1E3A5F] truncate">
+                                          <div className="font-semibold text-xs text-[#1E3A5F] group-hover:text-[#0F766E] truncate transition">
                                             {mat.title}
                                           </div>
                                           <div className="flex items-center gap-2 text-[10px] text-[#5B6B7C] mt-0.5">
@@ -585,27 +768,21 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
                                             </span>
                                             <span>•</span>
                                             <span>{formatBytes(mat.sizeBytes)}</span>
+                                            <span>•</span>
+                                            <span className="text-teal-700 font-medium">Firebase Stored</span>
                                           </div>
                                         </div>
                                       </div>
 
-                                      <div className="flex items-center gap-1.5 shrink-0">
-                                        <a
-                                          href={mat.url.startsWith('http') || mat.url.startsWith('blob:') ? mat.url : undefined}
-                                          download={mat.title}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          onClick={() => {
-                                            if (currentUser && selectedCourse) {
-                                              markMaterialRead(currentUser.userId, mat.materialId, selectedCourse.courseId);
-                                              addToast(`Opened ${mat.title}`, 'info');
-                                            }
-                                          }}
-                                          className="px-2.5 py-1.5 bg-[#EEF3F7] hover:bg-[#E2E8F0] text-[#1E3A5F] rounded-lg text-xs font-semibold flex items-center gap-1 transition"
+                                      <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                        <button
+                                          type="button"
+                                          onClick={() => setActiveMaterial(mat)}
+                                          className="px-2.5 py-1.5 bg-[#EEF3F7] hover:bg-teal-50 hover:text-[#0F766E] text-[#1E3A5F] rounded-lg text-xs font-semibold flex items-center gap-1 transition border border-transparent hover:border-teal-200 cursor-pointer"
                                         >
-                                          <Download className="w-3.5 h-3.5 text-[#0F766E]" />
+                                          <FileText className="w-3.5 h-3.5 text-[#0F766E]" />
                                           <span className="hidden sm:inline">View / Download</span>
-                                        </a>
+                                        </button>
 
                                         {role === 'TEACHER' && (
                                           <button
@@ -669,6 +846,18 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
           materials={materials.filter((m) => m.lessonId === activeVideo.lessonId)}
           onClose={() => setActiveVideo(null)}
           onNavigateToQuiz={onNavigateToQuiz}
+        />
+      )}
+
+      {/* Material Document Viewer Modal */}
+      {activeMaterial && (
+        <MaterialViewerModal
+          material={activeMaterial}
+          onClose={() => setActiveMaterial(null)}
+          onMaterialUpdated={(updated) => {
+            setMaterials((prev) => prev.map((m) => (m.materialId === updated.materialId ? updated : m)));
+            setActiveMaterial(updated);
+          }}
         />
       )}
 
@@ -820,6 +1009,13 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
                 )}
               </div>
 
+              {isSavingMaterial && materialUploadStatus && (
+                <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-center gap-2.5 text-xs text-[#0F766E] font-medium">
+                  <div className="w-4 h-4 border-2 border-[#0F766E] border-t-transparent rounded-full animate-spin shrink-0" />
+                  <span>{materialUploadStatus}</span>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
@@ -939,7 +1135,7 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
                 </div>
 
                 {videoSourceMode === 'URL' ? (
-                  <div>
+                  <div className="space-y-2">
                     <input
                       type="url"
                       required
@@ -948,8 +1144,33 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
                       onChange={(e) => setVideoUrl(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-xs focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
                     />
-                    <p className="text-[10px] text-[#5B6B7C] mt-1">
-                      Direct MP4 link, Google Cloud Storage, or streaming video endpoint.
+                    
+                    {/* Quick Presets for Faculty */}
+                    <div>
+                      <div className="text-[11px] font-semibold text-[#1E3A5F] mb-1">
+                        Or pick from Curated Department Lectures:
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {SAMPLE_LECTURE_PRESETS.map((preset) => (
+                          <button
+                            key={preset.title}
+                            type="button"
+                            onClick={() => {
+                              setVideoUrl(preset.url);
+                              setVideoTitle(preset.title);
+                              setVideoDurationMin(preset.durationMin);
+                              setVideoTranscript(preset.transcript);
+                            }}
+                            className="text-[10px] px-2 py-1 bg-slate-100 hover:bg-teal-50 hover:text-[#0F766E] border border-slate-200 hover:border-teal-300 rounded-lg text-slate-700 transition"
+                          >
+                            + {preset.title}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <p className="text-[10px] text-[#5B6B7C]">
+                      Supports direct MP4 links, YouTube videos, Vimeo, or Google Cloud Storage endpoints.
                     </p>
                   </div>
                 ) : (
@@ -970,9 +1191,21 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
                       }`}
                     >
                       {videoFileName ? (
-                        <div className="flex items-center justify-center gap-2 text-emerald-800">
-                          <Check className="w-4 h-4 text-emerald-600" />
-                          <div className="text-xs font-bold truncate max-w-xs">{videoFileName}</div>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-center gap-2 text-emerald-800">
+                            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <div className="text-xs font-bold truncate max-w-xs">{videoFileName}</div>
+                          </div>
+                          {selectedVideoFile && (
+                            <div className="flex items-center justify-center gap-2 text-[11px] text-emerald-700 font-medium">
+                              <span>{(selectedVideoFile.size / 1024 / 1024).toFixed(2)} MB</span>
+                              <span>•</span>
+                              <span>{videoDurationMin} mins</span>
+                              <span>•</span>
+                              <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-semibold">Ready to Save</span>
+                            </div>
+                          )}
+                          <div className="text-[10px] text-teal-700 hover:text-teal-900 underline font-medium">Click to select different file</div>
                         </div>
                       ) : (
                         <div className="space-y-1">
@@ -980,6 +1213,9 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
                           <div className="text-xs font-semibold text-[#1E3A5F]">
                             Click to select MP4 / WebM video file
                           </div>
+                          <p className="text-[10px] text-slate-500">
+                            Stored in high-speed persistent browser vault with zero size limit for smooth, instant playback.
+                          </p>
                         </div>
                       )}
                     </div>
@@ -1001,11 +1237,23 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
                 />
               </div>
 
+              {/* Upload Status Banner */}
+              {isSavingVideo && videoUploadStatus && (
+                <div className="p-2.5 rounded-xl bg-teal-50 border border-teal-200 text-xs text-teal-800 flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 border-2 border-[#0F766E] border-t-transparent rounded-full animate-spin shrink-0" />
+                  <span>{videoUploadStatus}</span>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setVideoLesson(null)}
+                  onClick={() => {
+                    setVideoLesson(null);
+                    setSelectedVideoFile(null);
+                    setEditingVideoId(null);
+                  }}
                   className="px-4 py-2 bg-[#EEF3F7] text-[#1E3A5F] hover:bg-[#E2E8F0] rounded-xl text-xs font-semibold"
                 >
                   Cancel
@@ -1016,7 +1264,11 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
                   className="px-4 py-2 bg-[#0F766E] hover:bg-[#0B5F59] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <Video className="w-3.5 h-3.5" />
-                  {isSavingVideo ? 'Attaching...' : 'Attach Video Lecture'}
+                  {isSavingVideo
+                    ? 'Saving Video Lecture...'
+                    : editingVideoId
+                    ? 'Update Video Lecture'
+                    : 'Attach Video Lecture'}
                 </button>
               </div>
             </form>

@@ -109,6 +109,31 @@ export async function testConnection(): Promise<boolean> {
   }
 }
 
+/**
+ * Recursively removes undefined fields from objects/arrays so Firestore operations
+ * never reject writes with 'Unsupported field value: undefined'.
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data
+      .filter((item) => item !== undefined)
+      .map((item) => sanitizeForFirestore(item)) as unknown as T;
+  }
+  if (typeof data === 'object' && !(data instanceof Date)) {
+    const clean: Record<string, any> = {};
+    for (const [key, val] of Object.entries(data as Record<string, any>)) {
+      if (val !== undefined) {
+        clean[key] = sanitizeForFirestore(val);
+      }
+    }
+    return clean as T;
+  }
+  return data;
+}
+
 // Memory cache populated strictly from real-time Firestore listeners
 const memoryStore = {
   users: [] as User[],
@@ -179,7 +204,7 @@ export async function createUser(user: Omit<User, 'userId' | 'createdAt'> & { us
     createdAt: new Date().toISOString()
   };
   try {
-    await setDoc(doc(db, 'users', userId), newUser);
+    await setDoc(doc(db, 'users', userId), sanitizeForFirestore(newUser));
     const existingIndex = memoryStore.users.findIndex((u) => u.userId === userId);
     if (existingIndex >= 0) {
       memoryStore.users[existingIndex] = newUser;
@@ -392,7 +417,7 @@ export async function createLesson(lesson: Omit<Lesson, 'lessonId'>): Promise<Le
     lessonId
   };
   try {
-    await setDoc(doc(db, 'lessons', lessonId), newLesson);
+    await setDoc(doc(db, 'lessons', lessonId), sanitizeForFirestore(newLesson));
     memoryStore.lessons.push(newLesson);
     // increment module lesson count
     const modSnap = await getDoc(doc(db, 'modules', lesson.moduleId));
@@ -443,20 +468,48 @@ export async function getVideoLectures(courseId: string): Promise<VideoLecture[]
   }
 }
 
-export async function addVideoLecture(video: Omit<VideoLecture, 'videoId'>): Promise<VideoLecture> {
-  const videoId = 'vid-' + Date.now();
+export async function addVideoLecture(video: Omit<VideoLecture, 'videoId'> & { videoId?: string }): Promise<VideoLecture> {
+  const videoId = video.videoId || 'vid-' + Date.now();
   const newVideo: VideoLecture = {
     ...video,
     videoId,
-    uploadedAt: new Date().toISOString()
+    uploadedAt: video.uploadedAt || new Date().toISOString()
   };
+  const sanitized = sanitizeForFirestore(newVideo);
   try {
-    await setDoc(doc(db, 'videoLectures', videoId), newVideo);
-    memoryStore.videos.push(newVideo);
+    await setDoc(doc(db, 'videoLectures', videoId), sanitized);
+    const existingIndex = memoryStore.videos.findIndex((v) => v.videoId === videoId);
+    if (existingIndex >= 0) {
+      memoryStore.videos[existingIndex] = newVideo;
+    } else {
+      memoryStore.videos.push(newVideo);
+    }
+    // Automatically link to lesson if lessonId is provided
+    if (newVideo.lessonId) {
+      try {
+        await updateDoc(doc(db, 'lessons', newVideo.lessonId), { videoId });
+      } catch {
+        // Non-blocking if lesson doc is managed separately
+      }
+    }
     return newVideo;
   } catch (err) {
     handleFirestoreError(err, OperationType.CREATE, `videoLectures/${videoId}`);
     return newVideo;
+  }
+}
+
+export async function updateVideoLecture(videoId: string, updates: Partial<VideoLecture>): Promise<void> {
+  const sanitized = sanitizeForFirestore(updates);
+  try {
+    await updateDoc(doc(db, 'videoLectures', videoId), sanitized);
+    const existingIndex = memoryStore.videos.findIndex((v) => v.videoId === videoId);
+    if (existingIndex >= 0) {
+      memoryStore.videos[existingIndex] = { ...memoryStore.videos[existingIndex], ...updates };
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `videoLectures/${videoId}`);
+    await setDoc(doc(db, 'videoLectures', videoId), sanitized, { merge: true });
   }
 }
 
