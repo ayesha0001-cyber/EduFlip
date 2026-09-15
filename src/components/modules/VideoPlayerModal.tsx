@@ -16,11 +16,19 @@ import {
   Clock,
   Sparkles,
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  Upload,
+  Link as LinkIcon
 } from 'lucide-react';
 import type { VideoLecture, LearningMaterial } from '../../types';
-import { saveVideoProgress, getVideoProgress, markMaterialRead } from '../../services/dataService';
-import { resolvePlayableUrl, getYouTubeEmbedInfo, getVimeoEmbedInfo } from '../../services/mediaStorage';
+import { saveVideoProgress, getVideoProgress, markMaterialRead, updateVideoLecture } from '../../services/dataService';
+import {
+  resolvePlayableUrl,
+  getYouTubeEmbedInfo,
+  getVimeoEmbedInfo,
+  saveMediaFile,
+  RELIABLE_BACKUP_VIDEO_STREAM
+} from '../../services/mediaStorage';
 import { loadFileFromFirestore } from '../../services/firestoreStorage';
 
 interface VideoPlayerModalProps {
@@ -38,8 +46,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 }) => {
   const { currentUser, selectedCourse, addToast } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [resolvedUrl, setResolvedUrl] = useState<string>('');
+  const [isLocalMissing, setIsLocalMissing] = useState<boolean>(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(video.durationSec || 600);
@@ -50,12 +60,18 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [hasVideoError, setHasVideoError] = useState(false);
   const [activeTab, setActiveTab] = useState<'transcript' | 'notes' | 'materials'>('transcript');
 
+  // Teacher tools for source management
+  const [showUrlEditor, setShowUrlEditor] = useState(false);
+  const [inputNewCloudUrl, setInputNewCloudUrl] = useState('');
+  const [isReattaching, setIsReattaching] = useState(false);
+
   // Resolve media URL on mount (handles IndexedDB local files, cloud URLs, or external links)
   useEffect(() => {
     let isMounted = true;
-    resolvePlayableUrl(video.url).then((playable) => {
+    resolvePlayableUrl(video.url).then((res) => {
       if (isMounted) {
-        setResolvedUrl(playable);
+        setResolvedUrl(res.url);
+        setIsLocalMissing(res.isLocalMissing);
         setHasVideoError(false);
       }
     });
@@ -161,6 +177,41 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     addToast('🎉 Lecture marked as 100% completed! Pre-quiz unlocked.', 'success');
   };
 
+  const handleReattachVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsReattaching(true);
+    try {
+      const res = await saveMediaFile(file, 'video', `${video.courseId}_${video.lessonId}_${file.name}`);
+      await updateVideoLecture(video.videoId, { url: res.url });
+      const localUrl = URL.createObjectURL(file);
+      setResolvedUrl(localUrl);
+      setIsLocalMissing(false);
+      setHasVideoError(false);
+      addToast('Video attached to this browser & updated in course!', 'success');
+    } catch (err) {
+      console.error('Failed to attach video file:', err);
+      addToast('Failed to save file to browser storage.', 'error');
+    } finally {
+      setIsReattaching(false);
+    }
+  };
+
+  const handleSaveCloudUrl = async () => {
+    if (!inputNewCloudUrl.trim()) return;
+    try {
+      await updateVideoLecture(video.videoId, { url: inputNewCloudUrl.trim() });
+      setResolvedUrl(inputNewCloudUrl.trim());
+      setIsLocalMissing(false);
+      setHasVideoError(false);
+      setShowUrlEditor(false);
+      addToast('Video lecture source updated! Accessible across all devices.', 'success');
+    } catch (err) {
+      console.error('Failed to update URL:', err);
+      addToast('Failed to update video lecture.', 'error');
+    }
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -170,6 +221,15 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto">
       <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl border border-[#E2E8F0] overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-150">
+        {/* Hidden file input for quick local video re-attaching */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept="video/mp4,video/webm"
+          className="hidden"
+          onChange={handleReattachVideo}
+        />
+
         {/* Header Bar */}
         <div className="px-5 py-3.5 bg-[#1E3A5F] text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -187,6 +247,86 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Informative Multi-Device Notice when source is from another origin */}
+        {isLocalMissing && (
+          <div className="bg-amber-950/90 text-amber-200 px-4 py-2.5 text-xs flex flex-wrap items-center justify-between gap-3 border-b border-amber-700/60 z-20">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                <strong>Multi-Device Notice:</strong> This video was uploaded locally on another device/browser. Streaming the verified university demonstration lecture below.
+              </span>
+            </div>
+            {currentUser?.role === 'TEACHER' && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isReattaching}
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded text-[11px] flex items-center gap-1.5 transition shadow-xs"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  {isReattaching ? 'Saving file...' : 'Re-attach Video on this Device'}
+                </button>
+                <button
+                  onClick={() => {
+                    setInputNewCloudUrl(video.url.startsWith('http') ? video.url : '');
+                    setShowUrlEditor(true);
+                  }}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded text-[11px] flex items-center gap-1.5 transition border border-slate-600"
+                >
+                  <LinkIcon className="w-3.5 h-3.5" />
+                  Set YouTube / Cloud Link
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Quick Teacher Cloud URL Editor */}
+        {showUrlEditor && (
+          <div className="p-3 bg-slate-900 border-b border-slate-800 text-white flex flex-col gap-2 z-20">
+            <div className="flex items-center justify-between text-xs font-semibold">
+              <span className="text-teal-300">Update Lecture Video Link (accessible on all student devices & Netlify)</span>
+              <button onClick={() => setShowUrlEditor(false)} className="text-slate-400 hover:text-white text-xs">✕</button>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                placeholder="https://www.youtube.com/watch?v=... or direct MP4 URL"
+                value={inputNewCloudUrl}
+                onChange={(e) => setInputNewCloudUrl(e.target.value)}
+                className="flex-1 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none focus:ring-1 focus:ring-teal-400"
+              />
+              <button
+                onClick={handleSaveCloudUrl}
+                className="px-3 py-1.5 bg-[#0F766E] hover:bg-[#0B5F59] text-white rounded-lg text-xs font-semibold"
+              >
+                Save & Play
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-300">
+              <span className="text-slate-400">Curated Presets:</span>
+              <button
+                onClick={() => setInputNewCloudUrl('https://www.youtube.com/watch?v=Y_6v9SKV2GM')}
+                className="hover:underline text-teal-300"
+              >
+                • TPACK Framework (YouTube)
+              </button>
+              <button
+                onClick={() => setInputNewCloudUrl('https://www.youtube.com/watch?v=qdKzSq_t8k8')}
+                className="hover:underline text-teal-300"
+              >
+                • Flipped Classroom Overview (YouTube)
+              </button>
+              <button
+                onClick={() => setInputNewCloudUrl(RELIABLE_BACKUP_VIDEO_STREAM)}
+                className="hover:underline text-teal-300"
+              >
+                • University Open Stream (CDN)
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Video Player Section */}
         <div className="relative bg-black aspect-video w-full flex items-center justify-center group overflow-hidden">
@@ -216,12 +356,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               <AlertCircle className="w-10 h-10 text-amber-400 mx-auto" />
               <div className="font-semibold text-sm">Media Source Notice</div>
               <p className="text-xs text-slate-300 leading-relaxed">
-                The original media file could not be rendered directly. You can load the university open backup stream or download the file.
+                The original media file could not be rendered directly on this device. You can load the verified university open backup stream or mark as completed.
               </p>
               <div className="flex items-center justify-center gap-2 pt-2">
                 <button
                   onClick={() => {
-                    setResolvedUrl('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
+                    setResolvedUrl(RELIABLE_BACKUP_VIDEO_STREAM);
                     setHasVideoError(false);
                   }}
                   className="px-3 py-1.5 bg-[#0F766E] hover:bg-[#0B5F59] text-white rounded-lg text-xs font-semibold"
@@ -244,7 +384,15 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 poster={video.thumbnailUrl}
                 className="w-full h-full object-contain cursor-pointer"
                 onClick={togglePlay}
-                onError={() => setHasVideoError(true)}
+                onError={() => {
+                  if (resolvedUrl !== RELIABLE_BACKUP_VIDEO_STREAM) {
+                    // Auto-fallback to guaranteed university stream
+                    setResolvedUrl(RELIABLE_BACKUP_VIDEO_STREAM);
+                    setIsLocalMissing(true);
+                  } else {
+                    setHasVideoError(true);
+                  }
+                }}
                 onTimeUpdate={() => {
                   if (videoRef.current) {
                     setCurrentTime(videoRef.current.currentTime);

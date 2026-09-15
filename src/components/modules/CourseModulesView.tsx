@@ -43,7 +43,7 @@ import {
   subscribeToLearningMaterials,
   subscribeToModules
 } from '../../services/dataService';
-import { saveMediaFile, SAMPLE_LECTURE_PRESETS } from '../../services/mediaStorage';
+import { saveMediaFile, SAMPLE_LECTURE_PRESETS, RELIABLE_BACKUP_VIDEO_STREAM } from '../../services/mediaStorage';
 import { saveFileToFirestore } from '../../services/firestoreStorage';
 import { VideoPlayerModal } from './VideoPlayerModal';
 import { MaterialViewerModal } from './MaterialViewerModal';
@@ -145,7 +145,7 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
   const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
   const [videoTitle, setVideoTitle] = useState('');
   const [videoSourceMode, setVideoSourceMode] = useState<'FILE' | 'URL'>('URL');
-  const [videoUrl, setVideoUrl] = useState('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
+  const [videoUrl, setVideoUrl] = useState(RELIABLE_BACKUP_VIDEO_STREAM);
   const [videoFileName, setVideoFileName] = useState('');
   const [videoDurationMin, setVideoDurationMin] = useState(15);
   const [videoTranscript, setVideoTranscript] = useState('');
@@ -333,7 +333,7 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
       setEditingVideoId(null);
       setVideoTitle(`${lesson.title} - Video Lecture`);
       setVideoSourceMode('URL');
-      setVideoUrl('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
+      setVideoUrl(RELIABLE_BACKUP_VIDEO_STREAM);
       setVideoFileName('');
       setVideoDurationMin(15);
       setVideoTranscript('');
@@ -395,7 +395,7 @@ export const CourseModulesView: React.FC<CourseModulesViewProps> = ({ onNavigate
         finalUrl = storedMedia.url;
         addToast(`Video "${videoTitle.trim()}" saved to persistent media storage!`, 'success');
       } else if (!finalUrl) {
-        finalUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+        finalUrl = RELIABLE_BACKUP_VIDEO_STREAM;
       }
 
       const durationSec = (videoDurationMin || 15) * 60;
