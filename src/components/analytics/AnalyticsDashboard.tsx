@@ -50,24 +50,7 @@ export const AnalyticsDashboard: React.FC = () => {
   // Student Individual Progress State (Student)
   const [studentProgress, setStudentProgress] = useState<any>(null);
 
-  const fetchAnalytics = async () => {
-    if (!selectedCourse) return;
-    setLoading(true);
-    try {
-      if (role === 'STUDENT' && currentUser) {
-        const prog = await getStudentComprehensiveProgress(currentUser.userId, selectedCourse.courseId);
-        setStudentProgress(prog);
-      } else {
-        const cohort = await getCourseCohortAnalytics(selectedCourse.courseId);
-        setCohortData(cohort);
-      }
-    } catch (err) {
-      console.error('Error loading analytics:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  fetchAnalytics
   useEffect(() => {
     fetchAnalytics();
   }, [selectedCourse, role, currentUser]);
