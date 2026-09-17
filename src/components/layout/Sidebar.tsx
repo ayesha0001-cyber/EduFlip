@@ -14,7 +14,10 @@ import {
   BookOpen,
   LogOut,
   X,
-  GraduationCap
+  GraduationCap,
+  ShieldCheck,
+  Plus,
+  MessageSquare
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -34,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isMobileOpen,
   onCloseMobile
 }) => {
-  const { role, currentUser, logout } = useAuth();
+  const { role, currentUser, logout, openCreateCourseModal } = useAuth();
 
   const isDrawerOpen = isMobileOpen ?? mobileOpen ?? false;
   const handleClose = () => {
@@ -120,190 +123,264 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Phase 1: Before Class */}
-        <div className="space-y-1">
-          <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-[#0F766E] flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#0F766E]" />
-            Phase 1: Before Class
-          </div>
-
-          <button
-            id="sidebar-nav-modules"
-            onClick={() => handleNavClick('course-modules')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
-              activeTab === 'course-modules'
-                ? 'bg-teal-50 text-[#0F766E] font-semibold border border-teal-200'
-                : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <Video className="w-4 h-4" />
-              <span>Modules & Lectures</span>
-            </div>
-            <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono">
-              3 Mod
-            </span>
-          </button>
-
-          {role === 'TEACHER' && (
-            <button
-              id="sidebar-nav-readiness"
-              onClick={() => handleNavClick('readiness')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
-                activeTab === 'readiness'
-                  ? 'bg-teal-50 text-[#0F766E] font-semibold border border-teal-200'
-                  : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <UserCheck2 className="w-4 h-4" />
-                <span>Preparation Matrix</span>
+        {/* Role-Specific Navigation */}
+        {role === 'ADMIN' ? (
+          /* ================= ADMINISTRATOR WORKSPACE ================= */
+          <>
+            {/* Institutional Management */}
+            <div className="space-y-1">
+              <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-[#1E3A5F] flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                Institutional Management
               </div>
-              <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">
-                Live
-              </span>
-            </button>
-          )}
 
-          <button
-            id="sidebar-nav-pre-quiz"
-            onClick={() => handleNavClick('pre-quiz')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
-              activeTab === 'pre-quiz'
-                ? 'bg-teal-50 text-[#0F766E] font-semibold border border-teal-200'
-                : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <FileCheck2 className="w-4 h-4" />
-              <span>Pre-Class Quizzes</span>
-            </div>
-            <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold">
-              Required
-            </span>
-          </button>
-        </div>
+              <button
+                id="sidebar-nav-admin-users"
+                onClick={() => handleNavClick('admin-users')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
+                  activeTab === 'admin-users'
+                    ? 'bg-teal-50 text-[#0F766E] font-semibold border border-teal-200'
+                    : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Users className="w-4 h-4" />
+                  <span>User Management</span>
+                </div>
+              </button>
 
-        {/* Phase 2: During Class */}
-        <div className="space-y-1">
-          <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-[#1E3A5F] flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#1E3A5F]" />
-            Phase 2: During Class
-          </div>
+              <button
+                id="sidebar-nav-departments"
+                onClick={() => handleNavClick('admin-departments')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
+                  activeTab === 'admin-departments'
+                    ? 'bg-teal-50 text-[#0F766E] font-semibold border border-teal-200'
+                    : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Building2 className="w-4 h-4" />
+                  <span>Departments & Org</span>
+                </div>
+              </button>
 
-          <button
-            id="sidebar-nav-physical-classes"
-            onClick={() => handleNavClick('physical-classes')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
-              activeTab === 'physical-classes'
-                ? 'bg-blue-50 text-[#1E3A5F] font-semibold border border-blue-200'
-                : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <CalendarDays className="w-4 h-4" />
-              <span>{role === 'STUDENT' ? 'Physical Schedule' : 'Attendance & Roll Call'}</span>
-            </div>
-          </button>
-        </div>
+              <button
+                id="sidebar-nav-curriculum"
+                onClick={() => handleNavClick('course-modules')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
+                  activeTab === 'course-modules'
+                    ? 'bg-teal-50 text-[#0F766E] font-semibold border border-teal-200'
+                    : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <BookOpen className="w-4 h-4" />
+                  <span>Curriculum & Modules</span>
+                </div>
+              </button>
 
-        {/* Phase 3: After Class */}
-        <div className="space-y-1">
-          <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
-            Phase 3: After Class
-          </div>
-
-          <button
-            id="sidebar-nav-assignments"
-            onClick={() => handleNavClick('assignments')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
-              activeTab === 'assignments'
-                ? 'bg-amber-50 text-amber-800 font-semibold border border-amber-200'
-                : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <FileText className="w-4 h-4" />
-              <span>{role === 'TEACHER' ? 'Assignment Rubrics & Grading' : 'Submit Assignments'}</span>
-            </div>
-          </button>
-
-          <button
-            id="sidebar-nav-post-quiz"
-            onClick={() => handleNavClick('post-quiz')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
-              activeTab === 'post-quiz'
-                ? 'bg-amber-50 text-amber-800 font-semibold border border-amber-200'
-                : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <Award className="w-4 h-4" />
-              <span>Post-Class Quizzes</span>
-            </div>
-          </button>
-        </div>
-
-        {/* Analytics & Outcomes */}
-        <div className="space-y-1">
-          <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-[#5B6B7C]">
-            Insights & Progress
-          </div>
-
-          <button
-            id="sidebar-nav-analytics"
-            onClick={() => handleNavClick('analytics')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
-              activeTab === 'analytics'
-                ? 'bg-[#EEF3F7] text-[#1E3A5F] font-semibold border border-[#E2E8F0]'
-                : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <BarChart3 className="w-4 h-4" />
-              <span>{role === 'STUDENT' ? 'My Learning Progress' : 'Cohort Analytics'}</span>
-            </div>
-          </button>
-        </div>
-
-        {/* Administrator Specific Views */}
-        {role === 'ADMIN' && (
-          <div className="space-y-1">
-            <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-[#5B6B7C]">
-              Administration
+              <button
+                id="sidebar-nav-create-course-btn"
+                onClick={() => {
+                  openCreateCourseModal();
+                  handleClose();
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-[#0F766E] hover:bg-teal-50/70 border border-dashed border-teal-300 transition mt-2"
+              >
+                <div className="flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  <span>Add New Course</span>
+                </div>
+              </button>
             </div>
 
-            <button
-              id="sidebar-nav-admin-users"
-              onClick={() => handleNavClick('admin-users')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
-                activeTab === 'admin-users'
-                  ? 'bg-teal-50 text-[#0F766E] font-semibold border border-teal-200'
-                  : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Users className="w-4 h-4" />
-                <span>User Management</span>
+            {/* Insights & Compliance */}
+            <div className="space-y-1">
+              <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-[#5B6B7C]">
+                Institutional Oversight
               </div>
-            </button>
 
-            <button
-              id="sidebar-nav-departments"
-              onClick={() => handleNavClick('admin-departments')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
-                activeTab === 'admin-departments'
-                  ? 'bg-teal-50 text-[#0F766E] font-semibold border border-teal-200'
-                  : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Building2 className="w-4 h-4" />
-                <span>Departments & Org</span>
+              <button
+                id="sidebar-nav-analytics"
+                onClick={() => handleNavClick('analytics')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
+                  activeTab === 'analytics'
+                    ? 'bg-[#EEF3F7] text-[#1E3A5F] font-semibold border border-[#E2E8F0]'
+                    : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Institutional Analytics</span>
+                </div>
+              </button>
+            </div>
+          </>
+        ) : (
+          /* ================= TEACHER & STUDENT FLIPPED PHASES ================= */
+          <>
+            {/* Phase 1: Before Class */}
+            <div className="space-y-1">
+              <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-[#0F766E] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#0F766E]" />
+                Phase 1: Before Class
               </div>
-            </button>
-          </div>
+
+              <button
+                id="sidebar-nav-modules"
+                onClick={() => handleNavClick('course-modules')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
+                  activeTab === 'course-modules'
+                    ? 'bg-teal-50 text-[#0F766E] font-semibold border border-teal-200'
+                    : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Video className="w-4 h-4" />
+                  <span>Modules & Lectures</span>
+                </div>
+                <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono">
+                  3 Mod
+                </span>
+              </button>
+
+              {role === 'TEACHER' && (
+                <button
+                  id="sidebar-nav-readiness"
+                  onClick={() => handleNavClick('readiness')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
+                    activeTab === 'readiness'
+                      ? 'bg-teal-50 text-[#0F766E] font-semibold border border-teal-200'
+                      : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <UserCheck2 className="w-4 h-4" />
+                    <span>Preparation Matrix</span>
+                  </div>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">
+                    Live
+                  </span>
+                </button>
+              )}
+
+              <button
+                id="sidebar-nav-pre-quiz"
+                onClick={() => handleNavClick('pre-quiz')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
+                  activeTab === 'pre-quiz'
+                    ? 'bg-teal-50 text-[#0F766E] font-semibold border border-teal-200'
+                    : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <FileCheck2 className="w-4 h-4" />
+                  <span>Pre-Class Quizzes</span>
+                </div>
+                <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold">
+                  Required
+                </span>
+              </button>
+            </div>
+
+            {/* Phase 2: During Class */}
+            <div className="space-y-1">
+              <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-[#1E3A5F] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#1E3A5F]" />
+                Phase 2: During Class
+              </div>
+
+              <button
+                id="sidebar-nav-physical-classes"
+                onClick={() => handleNavClick('physical-classes')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
+                  activeTab === 'physical-classes'
+                    ? 'bg-blue-50 text-[#1E3A5F] font-semibold border border-blue-200'
+                    : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <CalendarDays className="w-4 h-4" />
+                  <span>{role === 'STUDENT' ? 'Physical Schedule' : 'Attendance & Roll Call'}</span>
+                </div>
+              </button>
+            </div>
+
+            {/* Phase 3: After Class */}
+            <div className="space-y-1">
+              <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+                Phase 3: After Class
+              </div>
+
+              <button
+                id="sidebar-nav-assignments"
+                onClick={() => handleNavClick('assignments')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
+                  activeTab === 'assignments'
+                    ? 'bg-amber-50 text-amber-800 font-semibold border border-amber-200'
+                    : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <FileText className="w-4 h-4" />
+                  <span>Assignment</span>
+                </div>
+              </button>
+
+              <button
+                id="sidebar-nav-post-quiz"
+                onClick={() => handleNavClick('post-quiz')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
+                  activeTab === 'post-quiz'
+                    ? 'bg-amber-50 text-amber-800 font-semibold border border-amber-200'
+                    : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Award className="w-4 h-4" />
+                  <span>Post-Class Quizzes</span>
+                </div>
+              </button>
+            </div>
+
+            {/* Analytics & Outcomes */}
+            <div className="space-y-1">
+              <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-[#5B6B7C]">
+                Insights & Feedback
+              </div>
+
+              <button
+                id="sidebar-nav-analytics"
+                onClick={() => handleNavClick('analytics')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
+                  activeTab === 'analytics'
+                    ? 'bg-[#EEF3F7] text-[#1E3A5F] font-semibold border border-[#E2E8F0]'
+                    : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <BarChart3 className="w-4 h-4" />
+                  <span>{role === 'STUDENT' ? 'My Learning Progress' : 'Cohort Analytics'}</span>
+                </div>
+              </button>
+
+              <button
+                id="sidebar-nav-feedback"
+                onClick={() => handleNavClick('feedback')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition ${
+                  activeTab === 'feedback'
+                    ? 'bg-[#EEF3F7] text-[#1E3A5F] font-semibold border border-[#E2E8F0]'
+                    : 'text-[#5B6B7C] hover:bg-[#EEF3F7] hover:text-[#0F172A]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Course Feedback</span>
+                </div>
+              </button>
+            </div>
+          </>
         )}
       </div>
 

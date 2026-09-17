@@ -50,17 +50,17 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({ quizType }) => {
   const [quizTitle, setQuizTitle] = useState('');
   const [quizDesc, setQuizDesc] = useState('');
   const [quizDuration, setQuizDuration] = useState(10);
-  const [newQuestions, setNewQuestions] = useState<QuizQuestion[]>([
-    {
-      questionId: 'q-new-1',
-      text: 'Which architectural tier handles SQL execution and data persistence?',
-      type: 'MCQ',
-      options: ['Presentation Tier', 'Logic Tier', 'Data Tier (Database)', 'Nginx Edge Tier'],
-      correctAnswer: 2,
-      explanation: 'The Data tier is strictly responsible for relational tables, indexing, transactions, and persistence.',
-      marks: 5
-    }
-  ]);
+  const emptyQuestion = (): QuizQuestion => ({
+  questionId: `q-${Date.now()}`,
+  text: '',
+  type: 'MCQ',
+  options: ['', '', '', ''],
+  correctAnswer: 0,
+  explanation: '',
+  marks: 5
+});
+
+const [newQuestions, setNewQuestions] = useState<QuizQuestion[]>([emptyQuestion()]);
 
   useEffect(() => {
     if (selectedCourse) {
@@ -147,9 +147,18 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({ quizType }) => {
   };
 
   const handleSaveNewQuiz = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!quizTitle.trim() || !selectedCourse) return;
+  e.preventDefault();
+  if (!quizTitle.trim() || !selectedCourse) return;
 
+  const invalid = newQuestions.some(
+    (q) => !q.text.trim() || q.options.some((o) => !o.trim())
+  );
+  if (invalid) {
+    addToast('Please fill in every question and all its options.', 'error');
+    return;
+  }
+
+  try {
     const totalMarks = newQuestions.reduce((acc, q) => acc + q.marks, 0);
     const created = await createQuiz({
       courseId: selectedCourse.courseId,
@@ -168,9 +177,38 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({ quizType }) => {
     setShowCreateModal(false);
     setQuizTitle('');
     setQuizDesc('');
+    setNewQuestions([emptyQuestion()]); // reset for next quiz
     addToast('Quiz published successfully!', 'success');
+  } catch (err) {
+    console.error('Quiz creation failed:', err);
+    addToast('Failed to create quiz — check permissions or connection.', 'error');
+  }
+};
+
+const updateQuestionField = (index: number, field: keyof QuizQuestion, value: any) => {
+    setNewQuestions((prev) =>
+      prev.map((q, i) => (i === index ? { ...q, [field]: value } : q))
+    );
   };
 
+  const updateOption = (qIndex: number, optIndex: number, value: string) => {
+    setNewQuestions((prev) =>
+      prev.map((q, i) =>
+        i === qIndex
+          ? { ...q, options: q.options.map((o, oi) => (oi === optIndex ? value : o)) }
+          : q
+      )
+    );
+  };
+
+  const addQuestion = () => {
+    setNewQuestions((prev) => [...prev, emptyQuestion()]);
+  };
+
+  const removeQuestion = (index: number) => {
+    setNewQuestions((prev) => prev.filter((_, i) => i !== index));
+  };
+  
   const formatTimer = (secs: number) => {
     const mins = Math.floor(secs / 60);
     const s = secs % 60;
@@ -621,66 +659,138 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({ quizType }) => {
 
       {/* Teacher Create Quiz Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-lg rounded-2xl p-6 shadow-xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
-            <h3 className="text-base font-bold text-[#1E3A5F] mb-4">
-              Configure New {quizType === 'PRE' ? 'Pre-Class' : 'Post-Class'} Quiz
-            </h3>
-            <form onSubmit={handleSaveNewQuiz} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-[#1E3A5F] mb-1">Quiz Title</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Module 2 Pre-Class Schema Modeling Quiz"
-                  value={quizTitle}
-                  onChange={(e) => setQuizTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-xs focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
-                />
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto">
+    <div className="bg-white w-full max-w-lg rounded-2xl p-6 shadow-xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
+      <h3 className="text-base font-bold text-[#1E3A5F] mb-4">
+        Configure New {quizType === 'PRE' ? 'Pre-Class' : 'Post-Class'} Quiz
+      </h3>
+      <form onSubmit={handleSaveNewQuiz} className="space-y-4">
+        <div>
+          <label className="block text-xs font-medium text-[#1E3A5F] mb-1">Quiz Title</label>
+          <input
+            type="text"
+            required
+            placeholder="e.g. Module 2 Pre-Class Schema Modeling Quiz"
+            value={quizTitle}
+            onChange={(e) => setQuizTitle(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-xs focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-[#1E3A5F] mb-1">Instructions / Description</label>
+          <textarea
+            rows={2}
+            placeholder="Instructions for students..."
+            value={quizDesc}
+            onChange={(e) => setQuizDesc(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-xs focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-[#1E3A5F] mb-1">Time Limit (Minutes)</label>
+          <input
+            type="number"
+            min={3}
+            max={60}
+            value={quizDuration}
+            onChange={(e) => setQuizDuration(parseInt(e.target.value))}
+            className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-xs focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
+          />
+        </div>
+
+        <div className="space-y-4 pt-2 border-t border-[#E2E8F0]">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-bold text-[#1E3A5F]">Questions</label>
+            <button
+              type="button"
+              onClick={addQuestion}
+              className="text-xs font-semibold text-[#0F766E] flex items-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add Question
+            </button>
+          </div>
+
+          {newQuestions.map((q, qIdx) => (
+            <div key={q.questionId} className="p-4 rounded-xl border border-[#E2E8F0] space-y-3 bg-[#F7F9FB]">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[11px] font-bold text-[#5B6B7C]">Question {qIdx + 1}</span>
+                {newQuestions.length > 1 && (
+                  <button type="button" onClick={() => removeQuestion(qIdx)} className="text-rose-600">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-[#1E3A5F] mb-1">Instructions / Description</label>
-                <textarea
-                  rows={2}
-                  placeholder="Instructions for students..."
-                  value={quizDesc}
-                  onChange={(e) => setQuizDesc(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-xs focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
-                />
-              </div>
+              <textarea
+                required
+                placeholder="Question text"
+                value={q.text}
+                onChange={(e) => updateQuestionField(qIdx, 'text', e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-xs focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
+              />
 
-              <div>
-                <label className="block text-xs font-medium text-[#1E3A5F] mb-1">Time Limit (Minutes)</label>
+              {q.options.map((opt, optIdx) => (
+                <div key={optIdx} className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name={`correct-${q.questionId}`}
+                    checked={q.correctAnswer === optIdx}
+                    onChange={() => updateQuestionField(qIdx, 'correctAnswer', optIdx)}
+                  />
+                  <input
+                    type="text"
+                    required
+                    placeholder={`Option ${String.fromCharCode(65 + optIdx)}`}
+                    value={opt}
+                    onChange={(e) => updateOption(qIdx, optIdx, e.target.value)}
+                    className="flex-1 px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-xs focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
+                  />
+                </div>
+              ))}
+
+              <textarea
+                placeholder="Explanation (shown after submission)"
+                value={q.explanation}
+                onChange={(e) => updateQuestionField(qIdx, 'explanation', e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-xs focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
+              />
+
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-[#5B6B7C]">Marks:</label>
                 <input
                   type="number"
-                  min={3}
-                  max={60}
-                  value={quizDuration}
-                  onChange={(e) => setQuizDuration(parseInt(e.target.value))}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-xs focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
+                  min={1}
+                  value={q.marks}
+                  onChange={(e) => updateQuestionField(qIdx, 'marks', parseInt(e.target.value) || 0)}
+                  className="w-20 px-2 py-1 rounded-lg border border-[#E2E8F0] text-xs focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
                 />
               </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 bg-[#EEF3F7] text-[#1E3A5F] hover:bg-[#E2E8F0] rounded-xl text-xs font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-[#0F766E] hover:bg-[#0B5F59] text-white rounded-xl text-xs font-semibold"
-                >
-                  Publish Quiz
-                </button>
-              </div>
-            </form>
-          </div>
+            </div>
+          ))}
         </div>
-      )}
+
+        <div className="pt-2 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setShowCreateModal(false)}
+            className="px-4 py-2 bg-[#EEF3F7] text-[#1E3A5F] hover:bg-[#E2E8F0] rounded-xl text-xs font-semibold"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 bg-[#0F766E] hover:bg-[#0B5F59] text-white rounded-xl text-xs font-semibold"
+          >
+            Publish Quiz
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
     </div>
   );
 };

@@ -12,9 +12,10 @@ import {
   Building2,
   BadgeCheck,
   ArrowRight,
-  Sparkles,
-  CheckCircle2
+  CheckCircle2,
+  Calendar
 } from 'lucide-react';
+import { SEMESTERS } from '../../utils/semester';
 
 export const AuthModal: React.FC = () => {
   const {
@@ -23,7 +24,6 @@ export const AuthModal: React.FC = () => {
     authModalMode,
     openAuthModal,
     initialSignUpRole,
-    login,
     loginWithEmail,
     signUp,
     addToast
@@ -35,6 +35,7 @@ export const AuthModal: React.FC = () => {
   // Sign In Form State
   const [signInEmail, setSignInEmail] = useState('');
   const [signInPassword, setSignInPassword] = useState('');
+  const [teacherLoginSemester, setTeacherLoginSemester] = useState<number>(6);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Sign Up Form State
@@ -56,58 +57,6 @@ export const AuthModal: React.FC = () => {
 
   if (!isAuthModalOpen) return null;
 
-  // Predefined Quick Demo Sign In Personas
-  const demoAccounts = [
-    {
-      role: 'STUDENT' as UserRole,
-      title: 'Student Account',
-      name: 'Ayesha Rahman',
-      email: 'student@edublend.edu',
-      meta: 'Roll: CS-2023-042 · 6th Semester',
-      icon: GraduationCap,
-      color: 'border-teal-200 bg-teal-50/70 hover:bg-teal-100/70 text-[#0F766E]'
-    },
-    {
-      role: 'TEACHER' as UserRole,
-      title: 'Teacher / Faculty Account',
-      name: 'Prof. Tariq Rahman',
-      email: 'teacher@edublend.edu',
-      meta: 'Course Instructor · Distributed Systems',
-      icon: BookOpen,
-      color: 'border-blue-200 bg-blue-50/70 hover:bg-blue-100/70 text-[#1E3A5F]'
-    },
-    {
-      role: 'ADMIN' as UserRole,
-      title: 'University Admin Account',
-      name: 'Dr. Ayesha Siddiqa',
-      email: 'ayesha0001@std.uftb.ac.bd',
-      meta: 'Academic Operations & Curriculum Director',
-      icon: ShieldCheck,
-      color: 'border-amber-200 bg-amber-50/70 hover:bg-amber-100/70 text-amber-700'
-    }
-  ];
-
-  const handleQuickSignIn = (demo: typeof demoAccounts[0]) => {
-    setIsSubmitting(true);
-    const demoUser: User = {
-      userId: `user-${demo.role.toLowerCase()}-1`,
-      fullName: demo.name,
-      email: demo.email,
-      role: demo.role,
-      department: 'Educational Technology and Engineering',
-      status: 'ACTIVE',
-      rollNo: demo.role === 'STUDENT' ? 'CS-2023-042' : undefined,
-      employeeId: demo.role !== 'STUDENT' ? 'EMP-882' : undefined,
-      semester: demo.role === 'STUDENT' ? 6 : undefined,
-      section: demo.role === 'STUDENT' ? 'A' : undefined,
-      createdAt: '2026-02-10T11:00:00Z'
-    };
-    setTimeout(() => {
-      login(demoUser);
-      setIsSubmitting(false);
-    }, 200);
-  };
-
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!signInEmail.trim()) {
@@ -116,7 +65,11 @@ export const AuthModal: React.FC = () => {
     }
     setIsSubmitting(true);
     try {
-      await loginWithEmail(signInEmail.trim(), selectedRole);
+      await loginWithEmail(
+        signInEmail.trim(),
+        selectedRole,
+        selectedRole === 'TEACHER' ? teacherLoginSemester : undefined
+      );
     } catch {
       addToast('Failed to authenticate. Please check your credentials.', 'error');
     } finally {
@@ -141,7 +94,7 @@ export const AuthModal: React.FC = () => {
         status: 'ACTIVE',
         rollNo: selectedRole === 'STUDENT' ? rollNo.trim() || `CS-2023-${Math.floor(100 + Math.random() * 900)}` : undefined,
         employeeId: selectedRole !== 'STUDENT' ? employeeId.trim() || `EMP-${Math.floor(100 + Math.random() * 900)}` : undefined,
-        semester: selectedRole === 'STUDENT' ? semester : undefined
+        semester: selectedRole === 'STUDENT' ? semester : (selectedRole === 'TEACHER' ? teacherLoginSemester : undefined)
       };
 
       await signUp(newUserPayload);
@@ -163,7 +116,7 @@ export const AuthModal: React.FC = () => {
             </div>
             <div>
               <h2 className="text-base font-bold text-[#1E3A5F]">
-                {activeTab === 'signin' ? 'Sign In to EduFlip' : 'Create Role Account'}
+                {activeTab === 'signin' ? 'Sign In to EduFlip' : 'Sign Up for EduFlip'}
               </h2>
               <p className="text-[11px] text-[#5B6B7C]">
                 Flipped Classroom Blended Learning Platform
@@ -200,7 +153,7 @@ export const AuthModal: React.FC = () => {
                 : 'border-transparent text-[#5B6B7C] hover:text-[#1E3A5F]'
             }`}
           >
-            <span>Sign Up (Role-Based)</span>
+            <span>Sign Up</span>
           </button>
         </div>
 
@@ -209,55 +162,6 @@ export const AuthModal: React.FC = () => {
           {/* TAB 1: SIGN IN */}
           {activeTab === 'signin' && (
             <div className="space-y-5">
-              {/* Quick Demo Instant Login Section */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#1E3A5F] flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-[#0F766E]" />
-                    Instant Role Demo Logins
-                  </span>
-                  <span className="text-[10px] text-[#5B6B7C]">Click to test any persona</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  {demoAccounts.map((demo) => {
-                    const Icon = demo.icon;
-                    return (
-                      <button
-                        key={demo.role}
-                        type="button"
-                        onClick={() => handleQuickSignIn(demo)}
-                        disabled={isSubmitting}
-                        className={`p-3 rounded-xl border text-left transition flex flex-col justify-between group ${demo.color}`}
-                      >
-                        <div className="flex items-center justify-between mb-1.5">
-                          <Icon className="w-4 h-4" />
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/70">
-                            {demo.role}
-                          </span>
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-[#1E3A5F] group-hover:text-[#0F766E] transition">
-                            {demo.name}
-                          </div>
-                          <div className="text-[10px] opacity-75 mt-0.5 line-clamp-1">
-                            {demo.meta}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="relative flex py-1 items-center">
-                <div className="flex-grow border-t border-[#E2E8F0]"></div>
-                <span className="flex-shrink mx-3 text-[11px] text-[#5B6B7C] uppercase font-semibold">
-                  Or Sign In with Email
-                </span>
-                <div className="flex-grow border-t border-[#E2E8F0]"></div>
-              </div>
-
               {/* Email Sign In Form */}
               <form onSubmit={handleEmailSignIn} className="space-y-3.5">
                 {/* Role Pill Selector */}
@@ -295,7 +199,7 @@ export const AuthModal: React.FC = () => {
                     <input
                       type="email"
                       required
-                      placeholder="e.g. student@edublend.edu or ayesha0001@std.uftb.ac.bd"
+                      placeholder="e.g. ayesha0001@std.uftb.ac.bd or your-name@university.edu"
                       value={signInEmail}
                       onChange={(e) => setSignInEmail(e.target.value)}
                       className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-[#E2E8F0] focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
@@ -318,6 +222,32 @@ export const AuthModal: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                {selectedRole === 'TEACHER' && (
+                  <div className="p-3 bg-blue-50/80 rounded-xl border border-blue-200">
+                    <label className="block text-xs font-semibold text-[#1E3A5F] mb-1.5 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-[#0F766E]" />
+                        Select Teaching Semester *
+                      </span>
+                      <span className="text-[10px] text-[#0F766E] font-medium">Cohort Visibility</span>
+                    </label>
+                    <select
+                      value={teacherLoginSemester}
+                      onChange={(e) => setTeacherLoginSemester(Number(e.target.value))}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-blue-200 bg-white font-medium text-[#1E3A5F] focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
+                    >
+                      {SEMESTERS.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-[#5B6B7C] mt-1.5 leading-relaxed">
+                      Choose the semester you are teaching. Your dashboard, created courses, and enrolled student lists will align with this semester cohort.
+                    </p>
+                  </div>
+                )}
 
                 <button
                   type="submit"
@@ -514,34 +444,54 @@ export const AuthModal: React.FC = () => {
                 )}
 
                 {selectedRole === 'TEACHER' && (
-                  <div className="grid grid-cols-2 gap-2.5 p-3 rounded-xl bg-blue-50/60 border border-blue-100">
-                    <div>
-                      <label className="block text-[10px] font-semibold text-[#1E3A5F] mb-1">
-                        Academic Designation
-                      </label>
-                      <select
-                        value={designation}
-                        onChange={(e) => setDesignation(e.target.value)}
-                        className="w-full px-2.5 py-1 text-xs rounded-lg border border-blue-200 bg-white focus:outline-none"
-                      >
-                        <option value="Professor">Professor</option>
-                        <option value="Associate Professor">Associate Professor</option>
-                        <option value="Assistant Professor">Assistant Professor</option>
-                        <option value="Lecturer">Lecturer</option>
-                      </select>
+                  <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-100 space-y-2.5">
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-[#1E3A5F] mb-1">
+                          Academic Designation
+                        </label>
+                        <select
+                          value={designation}
+                          onChange={(e) => setDesignation(e.target.value)}
+                          className="w-full px-2.5 py-1 text-xs rounded-lg border border-blue-200 bg-white focus:outline-none"
+                        >
+                          <option value="Professor">Professor</option>
+                          <option value="Associate Professor">Associate Professor</option>
+                          <option value="Assistant Professor">Assistant Professor</option>
+                          <option value="Lecturer">Lecturer</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-semibold text-[#1E3A5F] mb-1">
+                          Faculty Staff ID
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. FAC-CSE-09"
+                          value={employeeId}
+                          onChange={(e) => setEmployeeId(e.target.value)}
+                          className="w-full px-2.5 py-1 text-xs rounded-lg border border-blue-200 bg-white focus:outline-none"
+                        />
+                      </div>
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-semibold text-[#1E3A5F] mb-1">
-                        Faculty Staff ID
+                      <label className="block text-[10px] font-semibold text-[#1E3A5F] mb-1 flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-[#0F766E]" />
+                        Initial Teaching Semester
                       </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. FAC-CSE-09"
-                        value={employeeId}
-                        onChange={(e) => setEmployeeId(e.target.value)}
+                      <select
+                        value={teacherLoginSemester}
+                        onChange={(e) => setTeacherLoginSemester(Number(e.target.value))}
                         className="w-full px-2.5 py-1 text-xs rounded-lg border border-blue-200 bg-white focus:outline-none"
-                      />
+                      >
+                        {SEMESTERS.map((s) => (
+                          <option key={s.value} value={s.value}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 )}
@@ -567,7 +517,7 @@ export const AuthModal: React.FC = () => {
                 disabled={isSubmitting}
                 className="w-full py-2.5 px-4 bg-[#0F766E] hover:bg-[#0B5F59] text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center justify-center gap-2 mt-3"
               >
-                <span>Complete Registration & Enter Workspace</span>
+                <span>Create Account</span>
                 <CheckCircle2 className="w-4 h-4" />
               </button>
 

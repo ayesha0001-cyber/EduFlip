@@ -32,8 +32,11 @@ import type {
   FeedbackMessage,
   StudentReadiness,
   AuditLog,
-  Department
+  Department,
+  CourseRegistration,
+  CourseFeedback
 } from '../types';
+import { parseSemester, isSameSemester } from '../utils/semester';
 
 // Standard error handling enum & function conforming to the Firebase Skill
 export enum OperationType {
@@ -152,7 +155,9 @@ const memoryStore = {
   submissions: [] as Submission[],
   feedback: [] as FeedbackMessage[],
   auditLogs: [] as AuditLog[],
-  departments: [] as Department[]
+  departments: [] as Department[],
+  courseRegistrations: [] as CourseRegistration[],
+  courseFeedback: [] as CourseFeedback[]
 };
 
 // Initializes connection check & verifies baseline collections without injecting fake data
@@ -947,6 +952,10 @@ export async function getStudentAttendance(studentId: string, courseId: string):
 
 export async function getCourseReadiness(courseId: string): Promise<StudentReadiness[]> {
   try {
+    const courseDoc = await getDoc(doc(db, 'courses', courseId));
+    const courseData = courseDoc.exists() ? (courseDoc.data() as Course) : null;
+    const courseSemester = courseData ? parseSemester(courseData.semester) : 6;
+
     const [usersSnap, videosSnap, materialsSnap, quizzesSnap, quizAttemptsSnap, videoProgSnap, matProgSnap] =
       await Promise.all([
         getDocs(query(collection(db, 'users'), where('role', '==', 'STUDENT'))),
@@ -958,8 +967,11 @@ export async function getCourseReadiness(courseId: string): Promise<StudentReadi
         getDocs(query(collection(db, 'materialProgress'), where('courseId', '==', courseId)))
       ]);
 
-    const students: User[] = [];
-    usersSnap.forEach((d) => students.push(d.data() as User));
+    const allStudents: User[] = [];
+    usersSnap.forEach((d) => allStudents.push(d.data() as User));
+
+    // Only students who are in this course's semester
+    const students = allStudents.filter((s) => parseSemester(s.semester) === courseSemester);
 
     const courseVideos: VideoLecture[] = [];
     videosSnap.forEach((d) => courseVideos.push(d.data() as VideoLecture));
@@ -1391,4 +1403,624 @@ export async function createDepartment(dept: Omit<Department, 'deptId'>): Promis
     handleFirestoreError(err, OperationType.CREATE, `departments/${deptId}`);
     return newDept;
   }
+}
+
+// =========================================================================
+// 12. COURSE REGISTRATIONS (Semester-Based Student Enrollment)
+// =========================================================================
+
+export async function getCourseRegistrations(courseId: string): Promise<CourseRegistration[]> {
+  try {
+    const regSnap = await getDocs(
+      query(collection(db, 'courseRegistrations'), where('courseId', '==', courseId))
+    );
+    const regs: CourseRegistration[] = [];
+    regSnap.forEach((d) => regs.push(d.data() as CourseRegistration));
+
+    if (regs.length > 0) {
+      memoryStore.courseRegistrations = [
+        ...memoryStore.courseRegistrations.filter((r) => r.courseId !== courseId),
+        ...regs
+      ];
+      return regs;
+    }
+
+    // Auto-enroll students of matching semester if not yet populated
+    const courseDoc = await getDoc(doc(db, 'courses', courseId));
+    if (!courseDoc.exists()) return [];
+    const course = courseDoc.data() as Course;
+    const courseSem = parseSemester(course.semester);
+
+    const usersSnap = await getDocs(
+      query(collection(db, 'users'), where('role', '==', 'STUDENT'))
+    );
+    const matchedStudents: User[] = [];
+    usersSnap.forEach((d) => {
+      const u = d.data() as User;
+      if (parseSemester(u.semester) === courseSem) {
+        matchedStudents.push(u);
+      }
+    });
+
+    const createdRegs: CourseRegistration[] = [];
+    for (const student of matchedStudents) {
+      const regId = `${student.userId}_${courseId}`;
+      const reg: CourseRegistration = {
+        registrationId: regId,
+        courseId,
+        studentId: student.userId,
+        studentName: student.fullName,
+        rollNo: student.rollNo || 'N/A',
+        email: student.email,
+        department: student.department || 'Educational Technology and Engineering',
+        semester: courseSem,
+        registeredAt: new Date().toISOString(),
+        status: 'ACTIVE'
+      };
+      await setDoc(doc(db, 'courseRegistrations', regId), reg);
+      createdRegs.push(reg);
+    }
+
+    memoryStore.courseRegistrations = [
+      ...memoryStore.courseRegistrations.filter((r) => r.courseId !== courseId),
+      ...createdRegs
+    ];
+    return createdRegs;
+  } catch (err) {
+    console.warn('Could not load course registrations from Firestore', err);
+    return memoryStore.courseRegistrations.filter((r) => r.courseId === courseId);
+  }
+}
+
+export async function registerStudentForCourse(
+  student: User,
+  courseId: string
+): Promise<CourseRegistration> {
+  const regId = `${student.userId}_${courseId}`;
+  const courseDoc = await getDoc(doc(db, 'courses', courseId));
+  const course = courseDoc.exists() ? (courseDoc.data() as Course) : null;
+  const sem = course ? parseSemester(course.semester) : parseSemester(student.semester);
+
+  const reg: CourseRegistration = {
+    registrationId: regId,
+    courseId,
+    studentId: student.userId,
+    studentName: student.fullName,
+    rollNo: student.rollNo || 'N/A',
+    email: student.email,
+    department: student.department || 'Educational Technology and Engineering',
+    semester: sem,
+    registeredAt: new Date().toISOString(),
+    status: 'ACTIVE'
+  };
+
+  try {
+    await setDoc(doc(db, 'courseRegistrations', regId), reg);
+    const idx = memoryStore.courseRegistrations.findIndex((r) => r.registrationId === regId);
+    if (idx >= 0) memoryStore.courseRegistrations[idx] = reg;
+    else memoryStore.courseRegistrations.push(reg);
+
+    // Update enrolledStudentsCount on course
+    if (course) {
+      const currentCount = course.enrolledStudentsCount || 0;
+      await updateDoc(doc(db, 'courses', courseId), {
+        enrolledStudentsCount: currentCount + 1
+      });
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `courseRegistrations/${regId}`);
+  }
+  return reg;
+}
+
+export async function isStudentRegistered(
+  studentId: string,
+  courseId: string
+): Promise<boolean> {
+  try {
+    const regSnap = await getDoc(doc(db, 'courseRegistrations', `${studentId}_${courseId}`));
+    return regSnap.exists();
+  } catch {
+    return memoryStore.courseRegistrations.some(
+      (r) => r.studentId === studentId && r.courseId === courseId
+    );
+  }
+}
+
+// =========================================================================
+// 13. COURSE FEEDBACK SYSTEM (Real-Time Student Reviews & Teacher Responses)
+// =========================================================================
+
+export function subscribeToCourseFeedback(
+  courseId: string,
+  callback: (feedbacks: CourseFeedback[]) => void
+): Unsubscribe {
+  const q = query(collection(db, 'courseFeedback'), where('courseId', '==', courseId));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: CourseFeedback[] = [];
+      snapshot.forEach((d) => list.push(d.data() as CourseFeedback));
+      list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      memoryStore.courseFeedback = [
+        ...memoryStore.courseFeedback.filter((f) => f.courseId !== courseId),
+        ...list
+      ];
+      callback(list);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'courseFeedback');
+    }
+  );
+}
+
+export async function getCourseFeedback(courseId: string): Promise<CourseFeedback[]> {
+  try {
+    const q = query(collection(db, 'courseFeedback'), where('courseId', '==', courseId));
+    const snap = await getDocs(q);
+    const list: CourseFeedback[] = [];
+    snap.forEach((d) => list.push(d.data() as CourseFeedback));
+    list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return list;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, 'courseFeedback');
+    return memoryStore.courseFeedback.filter((f) => f.courseId === courseId);
+  }
+}
+
+export async function submitCourseFeedback(
+  feedback: Omit<CourseFeedback, 'feedbackId' | 'createdAt'>
+): Promise<CourseFeedback> {
+  const feedbackId = 'fb-' + Date.now();
+  const item: CourseFeedback = {
+    ...feedback,
+    feedbackId,
+    createdAt: new Date().toISOString()
+  };
+
+  try {
+    await setDoc(doc(db, 'courseFeedback', feedbackId), item);
+    memoryStore.courseFeedback.unshift(item);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, `courseFeedback/${feedbackId}`);
+  }
+  return item;
+}
+
+export async function replyCourseFeedback(
+  feedbackId: string,
+  teacherResponse: string,
+  replyBy?: string
+): Promise<void> {
+  try {
+    const now = new Date().toISOString();
+    const updates = {
+      teacherResponse,
+      reply: teacherResponse,
+      replyBy: replyBy || 'Teacher',
+      respondedAt: now,
+      repliedAt: now
+    };
+    await updateDoc(doc(db, 'courseFeedback', feedbackId), updates);
+    const existing = memoryStore.courseFeedback.find((f) => f.feedbackId === feedbackId);
+    if (existing) {
+      existing.teacherResponse = teacherResponse;
+      existing.reply = teacherResponse;
+      existing.replyBy = replyBy || 'Teacher';
+      existing.respondedAt = now;
+      existing.repliedAt = now;
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `courseFeedback/${feedbackId}`);
+  }
+}
+
+// =========================================================================
+// 14. COMPREHENSIVE REAL-TIME ANALYTICS (Teacher Cohort & Student Progress)
+// =========================================================================
+
+export interface StudentCohortMetric {
+  studentId: string;
+  studentName: string;
+  rollNo: string;
+  email: string;
+  avatarUrl?: string;
+  semester: number;
+  // Physical Attendance
+  totalClasses: number;
+  attendedClasses: number;
+  attendanceRate: number; // 0 - 100
+  attendanceStatus: 'EXCELLENT' | 'GOOD' | 'LOW';
+  // Pre-Class Video Watch
+  totalVideos: number;
+  completedVideos: number;
+  avgVideoWatchPct: number;
+  // Materials Opened / Downloaded
+  totalMaterials: number;
+  materialsOpenedCount: number;
+  materialsPct: number;
+  // Quizzes & Diagnostic Results
+  totalQuizzes: number;
+  quizzesAttemptedCount: number;
+  avgQuizScore: number;
+  quizResults: { quizId: string; title: string; score: number; percentage: number; passed: boolean }[];
+  // Assignments
+  totalAssignments: number;
+  assignmentsSubmittedCount: number;
+  assignmentsGradedCount: number;
+  totalMarksObtained: number;
+  maxPossibleMarks: number;
+  avgAssignmentScorePct: number;
+  submissionCompliance: 'COMPLETE' | 'PARTIAL' | 'PENDING';
+}
+
+export interface WeeklyAttendanceCompliance {
+  weekLabel: string;
+  classDate: string;
+  topic: string;
+  totalEnrolled: number;
+  presentCount: number;
+  complianceRate: number;
+}
+
+export interface CohortAnalyticsSummary {
+  courseId: string;
+  totalStudents: number;
+  avgAttendanceRate: number;
+  avgVideoWatchRate: number;
+  materialEngagementRate: number;
+  avgQuizScore: number;
+  assignmentSubmissionRate: number;
+  weeklyAttendance: WeeklyAttendanceCompliance[];
+  students: StudentCohortMetric[];
+}
+
+export async function getCourseCohortAnalytics(courseId: string): Promise<CohortAnalyticsSummary> {
+  const [
+    registrations,
+    classesSnap,
+    attendanceSnap,
+    videosSnap,
+    videoProgSnap,
+    materialsSnap,
+    matProgSnap,
+    quizzesSnap,
+    quizAttemptsSnap,
+    assignmentsSnap,
+    submissionsSnap
+  ] = await Promise.all([
+    getCourseRegistrations(courseId),
+    getDocs(query(collection(db, 'physicalClasses'), where('courseId', '==', courseId))),
+    getDocs(query(collection(db, 'attendance'), where('courseId', '==', courseId))),
+    getDocs(query(collection(db, 'videoLectures'), where('courseId', '==', courseId))),
+    getDocs(query(collection(db, 'videoProgress'), where('courseId', '==', courseId))),
+    getDocs(query(collection(db, 'learningMaterials'), where('courseId', '==', courseId))),
+    getDocs(query(collection(db, 'materialProgress'), where('courseId', '==', courseId))),
+    getDocs(query(collection(db, 'quizzes'), where('courseId', '==', courseId))),
+    getDocs(query(collection(db, 'quizAttempts'), where('courseId', '==', courseId))),
+    getDocs(query(collection(db, 'assignments'), where('courseId', '==', courseId))),
+    getDocs(query(collection(db, 'submissions'), where('courseId', '==', courseId)))
+  ]);
+
+  const classes: PhysicalClass[] = [];
+  classesSnap.forEach((d) => classes.push(d.data() as PhysicalClass));
+  classes.sort((a, b) => a.classDate.localeCompare(b.classDate));
+
+  const attendanceRecords: AttendanceRecord[] = [];
+  attendanceSnap.forEach((d) => attendanceRecords.push(d.data() as AttendanceRecord));
+
+  const videos: VideoLecture[] = [];
+  videosSnap.forEach((d) => videos.push(d.data() as VideoLecture));
+
+  const videoProgressList: VideoProgress[] = [];
+  videoProgSnap.forEach((d) => videoProgressList.push(d.data() as VideoProgress));
+
+  const materials: LearningMaterial[] = [];
+  materialsSnap.forEach((d) => materials.push(d.data() as LearningMaterial));
+
+  const matProgressList: { studentId: string; materialId: string; completed: boolean }[] = [];
+  matProgSnap.forEach((d) => matProgressList.push(d.data() as any));
+
+  const quizzes: Quiz[] = [];
+  quizzesSnap.forEach((d) => quizzes.push(d.data() as Quiz));
+
+  const quizAttempts: QuizAttempt[] = [];
+  quizAttemptsSnap.forEach((d) => quizAttempts.push(d.data() as QuizAttempt));
+
+  const assignments: Assignment[] = [];
+  assignmentsSnap.forEach((d) => assignments.push(d.data() as Assignment));
+
+  const submissions: Submission[] = [];
+  submissionsSnap.forEach((d) => submissions.push(d.data() as Submission));
+
+  // Build per-student metrics
+  const studentMetrics: StudentCohortMetric[] = registrations.map((reg) => {
+    const sId = reg.studentId;
+
+    // Physical Attendance
+    const studentAtts = attendanceRecords.filter((a) => a.studentId === sId);
+    const attendedCount = studentAtts.filter((a) => a.status === 'PRESENT' || a.status === 'EXCUSED').length;
+    const totalHeldClasses = classes.length > 0 ? classes.length : studentAtts.length;
+    const attRate = totalHeldClasses > 0 ? Math.round((attendedCount / totalHeldClasses) * 100) : 100;
+    const attStatus: 'EXCELLENT' | 'GOOD' | 'LOW' =
+      attRate >= 80 ? 'EXCELLENT' : attRate >= 65 ? 'GOOD' : 'LOW';
+
+    // Video Watch Rate
+    let totalWatchPct = 0;
+    let completedVideosCount = 0;
+    videos.forEach((v) => {
+      const prog = videoProgressList.find((vp) => vp.studentId === sId && vp.videoId === v.videoId);
+      const pct = prog ? prog.percent : 0;
+      totalWatchPct += pct;
+      if (pct >= 80) completedVideosCount++;
+    });
+    const avgVideoPct = videos.length > 0 ? Math.round(totalWatchPct / videos.length) : 0;
+
+    // Materials Engagement (Opened / Downloaded)
+    const openedMats = matProgressList.filter((mp) => mp.studentId === sId && mp.completed).length;
+    const matPct = materials.length > 0 ? Math.round((openedMats / materials.length) * 100) : 100;
+
+    // Quizzes & Results
+    const sAttempts = quizAttempts.filter((qa) => qa.studentId === sId);
+    let totalScorePct = 0;
+    const quizResults = quizzes.map((q) => {
+      const att = sAttempts.find((qa) => qa.quizId === q.quizId);
+      const score = att ? att.score : 0;
+      const pct = att ? att.percentage : 0;
+      if (att) totalScorePct += pct;
+      return {
+        quizId: q.quizId,
+        title: q.title,
+        score,
+        percentage: pct,
+        passed: pct >= 60
+      };
+    });
+    const avgQuizPct = sAttempts.length > 0 ? Math.round(totalScorePct / sAttempts.length) : 0;
+
+    // Assignments
+    const sSubmissions = submissions.filter((sub) => sub.studentId === sId);
+    const submittedCount = sSubmissions.length;
+    const gradedList = sSubmissions.filter((sub) => sub.status === 'GRADED');
+    let totalMarks = 0;
+    let maxMarks = 0;
+    gradedList.forEach((sub) => {
+      const asg = assignments.find((a) => a.assignmentId === sub.assignmentId);
+      const max = asg ? asg.maxMarks : 100;
+      totalMarks += sub.marksObtained || 0;
+      maxMarks += max;
+    });
+    const avgAsgPct = maxMarks > 0 ? Math.round((totalMarks / maxMarks) * 100) : submittedCount > 0 ? 80 : 0;
+
+    const subCompliance: 'COMPLETE' | 'PARTIAL' | 'PENDING' =
+      submittedCount >= assignments.length && assignments.length > 0
+        ? 'COMPLETE'
+        : submittedCount > 0
+        ? 'PARTIAL'
+        : 'PENDING';
+
+    return {
+      studentId: sId,
+      studentName: reg.studentName,
+      rollNo: reg.rollNo || 'N/A',
+      email: reg.email,
+      semester: reg.semester,
+      totalClasses: totalHeldClasses,
+      attendedClasses: attendedCount,
+      attendanceRate: attRate,
+      attendanceStatus: attStatus,
+      totalVideos: videos.length,
+      completedVideos: completedVideosCount,
+      avgVideoWatchPct: avgVideoPct,
+      totalMaterials: materials.length,
+      materialsOpenedCount: openedMats,
+      materialsPct: matPct,
+      totalQuizzes: quizzes.length,
+      quizzesAttemptedCount: sAttempts.length,
+      avgQuizScore: avgQuizPct,
+      quizResults,
+      totalAssignments: assignments.length,
+      assignmentsSubmittedCount: submittedCount,
+      assignmentsGradedCount: gradedList.length,
+      totalMarksObtained: totalMarks,
+      maxPossibleMarks: maxMarks,
+      avgAssignmentScorePct: avgAsgPct,
+      submissionCompliance: subCompliance
+    };
+  });
+
+  // Weekly Physical Attendance Compliance
+  const weeklyAttendance: WeeklyAttendanceCompliance[] = classes.map((c, idx) => {
+    const classAtts = attendanceRecords.filter((a) => a.classId === c.classId);
+    const presentInClass = classAtts.filter((a) => a.status === 'PRESENT' || a.status === 'EXCUSED').length;
+    const totalEnrolled = registrations.length || 1;
+    const rate = Math.round((presentInClass / totalEnrolled) * 100);
+    return {
+      weekLabel: `Week ${idx + 1}`,
+      classDate: c.classDate,
+      topic: c.topic,
+      totalEnrolled,
+      presentCount: presentInClass,
+      complianceRate: rate
+    };
+  });
+
+  // Cohort Summaries
+  const totalStudents = studentMetrics.length;
+  const avgAttendanceRate =
+    totalStudents > 0
+      ? Math.round(studentMetrics.reduce((acc, s) => acc + s.attendanceRate, 0) / totalStudents)
+      : 0;
+  const avgVideoWatchRate =
+    totalStudents > 0
+      ? Math.round(studentMetrics.reduce((acc, s) => acc + s.avgVideoWatchPct, 0) / totalStudents)
+      : 0;
+  const materialEngagementRate =
+    totalStudents > 0
+      ? Math.round(studentMetrics.reduce((acc, s) => acc + s.materialsPct, 0) / totalStudents)
+      : 0;
+  const avgQuizScore =
+    totalStudents > 0
+      ? Math.round(studentMetrics.reduce((acc, s) => acc + s.avgQuizScore, 0) / totalStudents)
+      : 0;
+  const totalSubmissionsExpected = totalStudents * (assignments.length || 1);
+  const totalSubmissionsReceived = studentMetrics.reduce(
+    (acc, s) => acc + s.assignmentsSubmittedCount,
+    0
+  );
+  const assignmentSubmissionRate =
+    totalSubmissionsExpected > 0
+      ? Math.round((totalSubmissionsReceived / totalSubmissionsExpected) * 100)
+      : 0;
+
+  return {
+    courseId,
+    totalStudents,
+    avgAttendanceRate,
+    avgVideoWatchRate,
+    materialEngagementRate,
+    avgQuizScore,
+    assignmentSubmissionRate,
+    weeklyAttendance,
+    students: studentMetrics
+  };
+}
+
+export interface StudentComprehensiveProgress {
+  courseId: string;
+  studentId: string;
+  totalClasses: number;
+  attendedClasses: number;
+  attendancePercentage: number;
+  attendanceRecords: AttendanceRecord[];
+  totalVideos: number;
+  completedVideos: number;
+  avgVideoWatchPct: number;
+  totalMaterials: number;
+  materialsOpenedCount: number;
+  materialsPct: number;
+  totalQuizzes: number;
+  quizzesAttemptedCount: number;
+  avgQuizScorePct: number;
+  quizAttempts: QuizAttempt[];
+  totalAssignments: number;
+  assignmentsSubmittedCount: number;
+  assignmentsGradedCount: number;
+  submissions: Submission[];
+}
+
+export async function getStudentComprehensiveProgress(
+  studentId: string,
+  courseId: string
+): Promise<StudentComprehensiveProgress> {
+  const [classesSnap, attSnap, vidSnap, vidProgSnap, matSnap, matProgSnap, quizSnap, quizAttSnap, asgSnap, subSnap] =
+    await Promise.all([
+      getDocs(query(collection(db, 'physicalClasses'), where('courseId', '==', courseId))),
+      getDocs(
+        query(
+          collection(db, 'attendance'),
+          where('courseId', '==', courseId),
+          where('studentId', '==', studentId)
+        )
+      ),
+      getDocs(query(collection(db, 'videoLectures'), where('courseId', '==', courseId))),
+      getDocs(
+        query(
+          collection(db, 'videoProgress'),
+          where('courseId', '==', courseId),
+          where('studentId', '==', studentId)
+        )
+      ),
+      getDocs(query(collection(db, 'learningMaterials'), where('courseId', '==', courseId))),
+      getDocs(
+        query(
+          collection(db, 'materialProgress'),
+          where('courseId', '==', courseId),
+          where('studentId', '==', studentId)
+        )
+      ),
+      getDocs(query(collection(db, 'quizzes'), where('courseId', '==', courseId))),
+      getDocs(
+        query(
+          collection(db, 'quizAttempts'),
+          where('courseId', '==', courseId),
+          where('studentId', '==', studentId)
+        )
+      ),
+      getDocs(query(collection(db, 'assignments'), where('courseId', '==', courseId))),
+      getDocs(
+        query(
+          collection(db, 'submissions'),
+          where('courseId', '==', courseId),
+          where('studentId', '==', studentId)
+        )
+      )
+    ]);
+
+  const totalClasses = classesSnap.size;
+  const attendanceRecords: AttendanceRecord[] = [];
+  attSnap.forEach((d) => attendanceRecords.push(d.data() as AttendanceRecord));
+  const attendedClasses = attendanceRecords.filter(
+    (a) => a.status === 'PRESENT' || a.status === 'EXCUSED'
+  ).length;
+  const attendancePercentage =
+    totalClasses > 0 ? Math.round((attendedClasses / totalClasses) * 100) : 100;
+
+  const totalVideos = vidSnap.size;
+  const vidProgressList: VideoProgress[] = [];
+  vidProgSnap.forEach((d) => vidProgressList.push(d.data() as VideoProgress));
+  let totalVideoPct = 0;
+  let completedVideos = 0;
+  vidProgressList.forEach((vp) => {
+    totalVideoPct += vp.percent;
+    if (vp.percent >= 80) completedVideos++;
+  });
+  const avgVideoWatchPct = totalVideos > 0 ? Math.round(totalVideoPct / totalVideos) : 0;
+
+  const totalMaterials = matSnap.size;
+  const matProgressList: { completed: boolean }[] = [];
+  matProgSnap.forEach((d) => matProgressList.push(d.data() as any));
+  const materialsOpenedCount = matProgressList.filter((m) => m.completed).length;
+  const materialsPct =
+    totalMaterials > 0 ? Math.round((materialsOpenedCount / totalMaterials) * 100) : 100;
+
+  const totalQuizzes = quizSnap.size;
+  const quizAttempts: QuizAttempt[] = [];
+  quizAttSnap.forEach((d) => quizAttempts.push(d.data() as QuizAttempt));
+  const quizzesAttemptedCount = quizAttempts.length;
+  const avgQuizScorePct =
+    quizzesAttemptedCount > 0
+      ? Math.round(
+          quizAttempts.reduce((acc, qa) => acc + qa.percentage, 0) / quizzesAttemptedCount
+        )
+      : 0;
+
+  const totalAssignments = asgSnap.size;
+  const submissions: Submission[] = [];
+  subSnap.forEach((d) => submissions.push(d.data() as Submission));
+  const assignmentsSubmittedCount = submissions.length;
+  const assignmentsGradedCount = submissions.filter((s) => s.status === 'GRADED').length;
+
+  return {
+    courseId,
+    studentId,
+    totalClasses,
+    attendedClasses,
+    attendancePercentage,
+    attendanceRecords,
+    totalVideos,
+    completedVideos,
+    avgVideoWatchPct,
+    totalMaterials,
+    materialsOpenedCount,
+    materialsPct,
+    totalQuizzes,
+    quizzesAttemptedCount,
+    avgQuizScorePct,
+    quizAttempts,
+    totalAssignments,
+    assignmentsSubmittedCount,
+    assignmentsGradedCount,
+    submissions
+  };
 }

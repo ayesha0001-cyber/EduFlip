@@ -1,12 +1,14 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import type { User, UserRole, Course, NotificationItem } from '../types';
 import {
   subscribeToUsers,
   subscribeToCourses,
   createUser,
   initializeFirestoreData,
-  addAuditLog
+  addAuditLog,
+  getCourseRegistrations
 } from '../services/dataService';
+import { parseSemester, formatSemesterLabel } from '../utils/semester';
 
 export interface Toast {
   id: string;
@@ -22,6 +24,9 @@ interface AuthContextType {
   setViewMode: (mode: 'dashboard' | 'landing') => void;
   selectedCourse: Course | null;
   courses: Course[];
+  allCourses: Course[];
+  activeSemester: number;
+  setActiveSemester: (sem: number) => void;
   users: User[];
   notifications: NotificationItem[];
   unreadNotificationCount: number;
@@ -34,8 +39,8 @@ interface AuthContextType {
   closeCreateCourseModal: () => void;
   openAuthModal: (mode?: 'signin' | 'signup', role?: UserRole) => void;
   closeAuthModal: () => void;
-  login: (user: User) => void;
-  loginWithEmail: (email: string, role?: UserRole) => Promise<User | null>;
+  login: (user: User, preferredSemester?: number) => void;
+  loginWithEmail: (email: string, role?: UserRole, preferredSemester?: number) => Promise<User | null>;
   signUp: (userData: Omit<User, 'userId' | 'createdAt'>) => Promise<User>;
   logout: () => void;
   switchUserRole: (role: UserRole) => void;
@@ -82,6 +87,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  const [activeSemester, setActiveSemesterState] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('edublend_active_semester');
+      if (saved) return Number(saved) || 6;
+      if (currentUser?.semester) {
+        return parseSemester(currentUser.semester);
+      }
+    } catch {
+      // ignore
+    }
+    return 6;
+  });
+
+  const setActiveSemester = (sem: number) => {
+    setActiveSemesterState(sem);
+    localStorage.setItem('edublend_active_semester', sem.toString());
+  };
+
+  const role: UserRole = currentUser?.role || 'STUDENT';
+
+  // Semester-based visibility filter
+  // Student strictly only sees courses matching their enrolled semester
+  // Teacher sees courses for their selected teaching semester
+  const visibleCourses = useMemo(() => {
+    if (role === 'STUDENT') {
+      const studentSemester = parseSemester(currentUser?.semester) || activeSemester || 6;
+      return courses.filter((c) => parseSemester(c.semester) === studentSemester);
+    }
+    if (role === 'TEACHER') {
+      const teacherSemester = activeSemester || (currentUser?.semester ? parseSemester(currentUser.semester) : 6);
+      const semesterCourses = courses.filter((c) => parseSemester(c.semester) === teacherSemester);
+      return semesterCourses.length > 0 ? semesterCourses : courses.filter((c) => parseSemester(c.semester) === teacherSemester);
+    }
+    return courses;
+  }, [courses, role, currentUser?.semester, activeSemester]);
+
+  // Keep selectedCourse aligned with visibleCourses
+  useEffect(() => {
+    setSelectedCourseState((current) => {
+      if (visibleCourses.length === 0) return null;
+      if (!current) return visibleCourses[0];
+      const match = visibleCourses.find((c) => c.courseId === current.courseId);
+      return match || visibleCourses[0];
+    });
+  }, [visibleCourses]);
+
+  // Auto-register enrolled semester students for new courses in background
+  useEffect(() => {
+    if (selectedCourse?.courseId) {
+      getCourseRegistrations(selectedCourse.courseId).catch(() => {});
+    }
+  }, [selectedCourse?.courseId]);
 
   // 1. Initialize Firestore & Subscribe to Real-Time Collections
   useEffect(() => {
@@ -149,17 +207,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsCreateCourseOpen(false);
   };
 
-  const login = (user: User) => {
-    setCurrentUser(user);
+  const login = (user: User, preferredSemester?: number) => {
+    let effectiveUser = user;
+    if (preferredSemester) {
+      effectiveUser = {
+        ...user,
+        semester: formatSemesterLabel(preferredSemester)
+      };
+      setActiveSemester(preferredSemester);
+    } else if (user.semester) {
+      const parsed = parseSemester(user.semester);
+      if (parsed) setActiveSemester(parsed);
+    }
+    setCurrentUser(effectiveUser);
     setIsAuthenticated(true);
     setViewMode('dashboard');
     setIsAuthModalOpen(false);
-    localStorage.setItem('edublend_current_user', JSON.stringify(user));
+    localStorage.setItem('edublend_current_user', JSON.stringify(effectiveUser));
     localStorage.setItem('edublend_is_auth', 'true');
-    addToast(`Signed in as ${user.fullName} (${user.role})`, 'success');
+    addToast(`Signed in as ${effectiveUser.fullName} (${effectiveUser.role})`, 'success');
   };
 
-  const loginWithEmail = async (email: string, role?: UserRole): Promise<User | null> => {
+  const loginWithEmail = async (email: string, role?: UserRole, preferredSemester?: number): Promise<User | null> => {
     const cleanEmail = email.trim().toLowerCase();
     let matched = users.find(
       (u) => u.email.toLowerCase() === cleanEmail && (!role || u.role === role)
@@ -170,7 +239,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (matched) {
-      login(matched);
+      if (preferredSemester) {
+        matched = { ...matched, semester: formatSemesterLabel(preferredSemester) };
+      }
+      login(matched, preferredSemester);
       return matched;
     }
 
@@ -184,6 +256,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       role: assignedRole,
       department: 'Educational Technology and Engineering',
       status: 'ACTIVE',
+      semester: preferredSemester ? formatSemesterLabel(preferredSemester) : (assignedRole === 'STUDENT' ? '6th Semester' : undefined),
       employeeId: assignedRole === 'ADMIN' ? 'EMP-ADM-01' : assignedRole === 'TEACHER' ? 'EMP-FAC-01' : undefined,
       rollNo: assignedRole === 'STUDENT' ? `CS-2026-${Math.floor(100 + Math.random() * 900)}` : undefined
     });
@@ -197,7 +270,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       newUser.userId
     );
 
-    login(newUser);
+    login(newUser, preferredSemester);
     return newUser;
   };
 
@@ -230,34 +303,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const targetUser = users.find((u) => u.role === targetRole);
     if (targetUser) {
       login(targetUser);
-      addToast(`Switched persona to ${targetRole}: ${targetUser.fullName}`, 'info');
+      addToast(`Switched account to ${targetRole}: ${targetUser.fullName}`, 'info');
       return;
     }
 
-    // If no user exists for that role yet, create one in Firestore in real-time
-    const names = {
-      ADMIN: 'Dr. Ayesha Rahman (Admin)',
-      TEACHER: 'Prof. Tariq Rahman (Faculty)',
-      STUDENT: 'Ayesha Rahman (Student)'
-    };
-    const emails = {
-      ADMIN: 'ayesha0001@std.uftb.ac.bd',
-      TEACHER: 'faculty@edublend.edu',
-      STUDENT: 'student@edublend.edu'
-    };
-
-    const created = await createUser({
-      email: emails[targetRole],
-      fullName: names[targetRole],
-      role: targetRole,
-      department: 'Educational Technology and Engineering',
-      status: 'ACTIVE',
-      employeeId: targetRole !== 'STUDENT' ? `EMP-${targetRole.slice(0, 3)}-01` : undefined,
-      rollNo: targetRole === 'STUDENT' ? 'CS-2026-001' : undefined
-    });
-
-    login(created);
-    addToast(`Created & switched persona to ${targetRole}: ${created.fullName}`, 'info');
+    // If no user exists for that role, open the authentication modal
+    openAuthModal('signup', targetRole);
+    addToast(`No registered ${targetRole.toLowerCase()} account found. Please register or sign in.`, 'info');
   };
 
   const markNotificationRead = (id: string) => {
@@ -271,7 +323,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addToast('All notifications marked as read', 'info');
   };
 
-  const role: UserRole = currentUser?.role || 'STUDENT';
   const unreadNotificationCount = notifications.filter((n) => !n.isRead).length;
 
   return (
@@ -283,7 +334,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         viewMode,
         setViewMode,
         selectedCourse,
-        courses,
+        courses: visibleCourses,
+        allCourses: courses,
+        activeSemester,
+        setActiveSemester,
         users,
         notifications,
         unreadNotificationCount,

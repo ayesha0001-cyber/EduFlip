@@ -26,13 +26,15 @@ export const LandingPage: React.FC = () => {
     isAuthenticated,
     currentUser,
     setViewMode,
-    openAuthModal,
-    switchUserRole
+    openAuthModal
   } = useAuth();
 
   const handleLaunchRole = (role: UserRole) => {
-    switchUserRole(role);
-    setViewMode('dashboard');
+    if (isAuthenticated && currentUser?.role === role) {
+      setViewMode('dashboard');
+    } else {
+      openAuthModal('signin', role);
+    }
   };
 
   return (
@@ -132,10 +134,10 @@ export const LandingPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Quick Demo Launch Cards */}
+          {/* Role Portal Entry Cards */}
           <div className="pt-10 max-w-4xl mx-auto">
             <div className="text-xs font-bold uppercase tracking-wider text-[#5B6B7C] mb-4">
-              Or Explore Instantly with Pre-Configured Personas:
+              Access Institutional Workspaces by Role:
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
@@ -147,14 +149,14 @@ export const LandingPage: React.FC = () => {
                   <GraduationCap className="w-5 h-5" />
                 </div>
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-[#1E3A5F]">Student Workspace</h3>
+                  <h3 className="text-sm font-bold text-[#1E3A5F]">Student Portal</h3>
                   <ChevronRight className="w-4 h-4 text-[#0F766E] group-hover:translate-x-1 transition" />
                 </div>
                 <p className="text-xs text-[#5B6B7C] mt-1">
                   Experience pre-class video lectures, interactive readiness quiz, attendance history, and submissions.
                 </p>
                 <div className="mt-3 text-[11px] font-semibold text-[#0F766E]">
-                  Enter as Ayesha Rahman →
+                  Access Student Workspace →
                 </div>
               </div>
 
@@ -173,7 +175,7 @@ export const LandingPage: React.FC = () => {
                   Inspect student preparation matrices, schedule in-person labs, take roll-call attendance, and score rubrics.
                 </p>
                 <div className="mt-3 text-[11px] font-semibold text-[#1E3A5F]">
-                  Enter as Prof. Tariq →
+                  Access Faculty Workspace →
                 </div>
               </div>
 
@@ -185,14 +187,14 @@ export const LandingPage: React.FC = () => {
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-[#1E3A5F]">Admin Workspace</h3>
+                  <h3 className="text-sm font-bold text-[#1E3A5F]">Admin Console</h3>
                   <ChevronRight className="w-4 h-4 text-amber-700 group-hover:translate-x-1 transition" />
                 </div>
                 <p className="text-xs text-[#5B6B7C] mt-1">
                   Manage university departments, faculty assignments, student enrollment accounts, and system health.
                 </p>
                 <div className="mt-3 text-[11px] font-semibold text-amber-700">
-                  Enter as Dr. Ayesha →
+                  Access Admin Console →
                 </div>
               </div>
             </div>

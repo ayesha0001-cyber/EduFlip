@@ -16,6 +16,7 @@ import { AnalyticsDashboard } from './components/analytics/AnalyticsDashboard';
 import { AdminUsersView } from './components/admin/AdminUsersView';
 import { AdminDepartmentsView } from './components/admin/AdminDepartmentsView';
 import { CreateCourseModal } from './components/courses/CreateCourseModal';
+import { CourseFeedbackView } from './components/feedback/CourseFeedbackView';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
 const AppContent: React.FC = () => {
@@ -34,11 +35,11 @@ const AppContent: React.FC = () => {
 
   // Sync default tab when persona role changes
   useEffect(() => {
-    if (role === 'STUDENT' && !['student-dashboard', 'course-modules', 'pre-quiz', 'physical-classes', 'assignments', 'post-quiz', 'analytics'].includes(activeTab)) {
+    if (role === 'STUDENT' && !['student-dashboard', 'course-modules', 'pre-quiz', 'physical-classes', 'assignments', 'post-quiz', 'analytics', 'feedback'].includes(activeTab)) {
       setActiveTab('student-dashboard');
-    } else if (role === 'TEACHER' && !['teacher-dashboard', 'course-modules', 'readiness', 'pre-quiz', 'physical-classes', 'assignments', 'grading', 'post-quiz', 'analytics'].includes(activeTab)) {
+    } else if (role === 'TEACHER' && !['teacher-dashboard', 'course-modules', 'readiness', 'pre-quiz', 'physical-classes', 'assignments', 'grading', 'post-quiz', 'analytics', 'feedback'].includes(activeTab)) {
       setActiveTab('teacher-dashboard');
-    } else if (role === 'ADMIN' && !['admin-dashboard', 'admin-users', 'admin-departments', 'course-modules', 'analytics'].includes(activeTab)) {
+    } else if (role === 'ADMIN' && !['admin-dashboard', 'admin-users', 'admin-departments', 'course-modules', 'analytics', 'feedback'].includes(activeTab)) {
       setActiveTab('admin-dashboard');
     }
   }, [role, activeTab]);
@@ -78,6 +79,8 @@ const AppContent: React.FC = () => {
         return <QuizRunner quizType="POST" />;
       case 'analytics':
         return <AnalyticsDashboard />;
+      case 'feedback':
+        return <CourseFeedbackView />;
 
       default:
         if (role === 'STUDENT') return <StudentDashboard onNavigate={setActiveTab} />;

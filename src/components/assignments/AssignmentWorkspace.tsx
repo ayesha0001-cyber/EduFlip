@@ -45,6 +45,7 @@ export const AssignmentWorkspace: React.FC = () => {
 
   // Teacher Grading Workspace
   const [activeGradingSub, setActiveGradingSub] = useState<Submission | null>(null);
+  const [awardedMarks, setAwardedMarks] = useState<number>(85);
   const [rubricScores, setRubricScores] = useState<Record<string, number>>({});
   const [generalFeedback, setGeneralFeedback] = useState('');
   const [isGradingSaving, setIsGradingSaving] = useState(false);
@@ -98,15 +99,10 @@ export const AssignmentWorkspace: React.FC = () => {
   const selectSubmissionForGrading = (sub: Submission) => {
     setActiveGradingSub(sub);
     setGeneralFeedback(sub.generalFeedback || '');
-    if (sub.rubricScores) {
-      setRubricScores(sub.rubricScores);
+    if (sub.marksObtained !== undefined) {
+      setAwardedMarks(sub.marksObtained);
     } else if (selectedAssignment) {
-      // Default to 80% marks on all criteria
-      const initial: Record<string, number> = {};
-      selectedAssignment.rubric.forEach((r) => {
-        initial[r.id] = Math.round(r.maxMarks * 0.85);
-      });
-      setRubricScores(initial);
+      setAwardedMarks(Math.round(selectedAssignment.maxMarks * 0.85));
     }
   };
 
@@ -138,7 +134,7 @@ export const AssignmentWorkspace: React.FC = () => {
     if (!activeGradingSub || !selectedAssignment) return;
     setIsGradingSaving(true);
 
-    const totalScore = (Object.values(rubricScores) as number[]).reduce((a: number, b: number) => a + b, 0);
+    const totalScore = Math.min(selectedAssignment.maxMarks, Math.max(0, Number(awardedMarks) || 0));
     const maxMarks = selectedAssignment.maxMarks;
     const pct = Math.round((totalScore / maxMarks) * 100);
 
@@ -147,13 +143,15 @@ export const AssignmentWorkspace: React.FC = () => {
     else if (pct >= 80) letter = 'A';
     else if (pct >= 70) letter = 'B+';
     else if (pct >= 60) letter = 'B';
+    else if (pct >= 50) letter = 'C';
+    else letter = 'F';
 
     const graded = await gradeSubmission(
       activeGradingSub.submissionId,
       totalScore,
       letter,
       generalFeedback,
-      rubricScores,
+      {},
       currentUser.fullName
     );
 
@@ -161,7 +159,7 @@ export const AssignmentWorkspace: React.FC = () => {
     setActiveGradingSub(graded);
     setSubmissions((prev) => prev.map((s) => (s.submissionId === graded.submissionId ? graded : s)));
     setIsGradingSaving(false);
-    addToast(`Grade released: ${totalScore}/${maxMarks} (${letter}) for ${activeGradingSub.studentName}`, 'success');
+    addToast(`Grade saved: ${totalScore}/${maxMarks} (${letter}) for ${activeGradingSub.studentName}`, 'success');
   };
 
   const handleSendFeedbackReply = async (e: React.FormEvent) => {
@@ -242,10 +240,10 @@ export const AssignmentWorkspace: React.FC = () => {
             </span>
           </div>
           <h1 className="text-xl font-bold text-[#1E3A5F]">
-            Assignments, Submissions & Rubrics
+            Course Assignments & Submissions
           </h1>
           <p className="text-xs text-[#5B6B7C] max-w-2xl mt-1">
-            After collaborative in-class activities, students synthesize their learning by submitting comprehensive architectural reports and receiving rubric-based evaluation.
+            Submit coursework assignments, review student documents, and evaluate performance with grades and feedback.
           </p>
         </div>
 
@@ -305,24 +303,6 @@ export const AssignmentWorkspace: React.FC = () => {
             <div className="text-xs text-[#0F172A] leading-relaxed whitespace-pre-line bg-[#F7F9FB] p-4 rounded-xl border border-[#E2E8F0]">
               <strong className="text-[#1E3A5F] block mb-1">Instructions:</strong>
               {selectedAssignment.instructions}
-            </div>
-
-            {/* Rubric Criteria Preview */}
-            <div>
-              <span className="text-[11px] font-bold text-[#5B6B7C] uppercase tracking-wider block mb-2">
-                Grading Rubric Criteria ({selectedAssignment.rubric.length} Dimensions)
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {selectedAssignment.rubric.map((crit) => (
-                  <div key={crit.id} className="p-3 rounded-xl border border-[#E2E8F0] bg-white text-xs space-y-1">
-                    <div className="font-semibold text-[#1E3A5F] truncate">{crit.name}</div>
-                    <div className="text-[11px] text-[#5B6B7C] flex justify-between">
-                      <span>Max Marks:</span>
-                      <strong className="text-[#0F766E]">{crit.maxMarks} pts</strong>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
 
@@ -484,55 +464,67 @@ export const AssignmentWorkspace: React.FC = () => {
                   )}
                 </div>
 
-                {/* Pane 3: Rubric Scoring Sliders & Grade Form (4 cols) */}
+                {/* Pane 3: Simple Grade Submission Form (4 cols) */}
                 <div className="lg:col-span-4 p-5 space-y-4 max-h-[600px] overflow-y-auto bg-white">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#E2E8F0]">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#1E3A5F]">
-                      Rubric Scoring
+                      Grade Submission
                     </span>
-                    <div className="text-xs font-bold text-[#0F766E] bg-teal-50 px-2.5 py-1 rounded-md border border-teal-200">
-                      Total: {(Object.values(rubricScores) as number[]).reduce((a: number, b: number) => a + b, 0)} / {selectedAssignment.maxMarks}
+                    {activeGradingSub && (
+                      <div className="text-xs font-bold text-[#0F766E] bg-teal-50 px-2.5 py-1 rounded-md border border-teal-200">
+                        {awardedMarks} / {selectedAssignment.maxMarks} ({Math.round(((awardedMarks || 0) / selectedAssignment.maxMarks) * 100)}%)
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Direct Marks Input */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-[#1E3A5F]">
+                      Award Marks (out of {selectedAssignment.maxMarks})
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max={selectedAssignment.maxMarks}
+                        value={awardedMarks}
+                        onChange={(e) => setAwardedMarks(Number(e.target.value))}
+                        className="w-28 px-3 py-2 text-sm font-bold text-[#0F766E] border border-[#E2E8F0] rounded-xl focus:ring-2 focus:ring-[#0F766E] focus:outline-none"
+                      />
+                      <span className="text-xs text-[#5B6B7C]">/ {selectedAssignment.maxMarks} pts</span>
+                    </div>
+
+                    {/* Quick Percentage Presets */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {[100, 90, 85, 80, 75, 60].map((pct) => {
+                        const marks = Math.round((selectedAssignment.maxMarks * pct) / 100);
+                        return (
+                          <button
+                            key={pct}
+                            type="button"
+                            onClick={() => setAwardedMarks(marks)}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition ${
+                              awardedMarks === marks
+                                ? 'bg-[#0F766E] text-white'
+                                : 'bg-[#EEF3F7] hover:bg-[#E2E8F0] text-[#1E3A5F]'
+                            }`}
+                          >
+                            {pct}% ({marks})
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* Dynamic Rubric Sliders */}
-                  <div className="space-y-4">
-                    {selectedAssignment.rubric.map((crit) => {
-                      const currentVal = rubricScores[crit.id] ?? Math.round(crit.maxMarks * 0.8);
-
-                      return (
-                        <div key={crit.id} className="p-3 rounded-xl border border-[#E2E8F0] bg-[#F7F9FB] space-y-2">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-[#1E3A5F]">{crit.name}</span>
-                            <span className="font-bold text-[#0F766E]">
-                              {currentVal} / {crit.maxMarks}
-                            </span>
-                          </div>
-                          <input
-                            type="range"
-                            min="0"
-                            max={crit.maxMarks}
-                            value={currentVal}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value);
-                              setRubricScores((prev) => ({ ...prev, [crit.id]: val }));
-                            }}
-                            className="w-full h-1.5 bg-[#E2E8F0] rounded-lg appearance-none cursor-pointer accent-[#0F766E]"
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* General Feedback Comments with Quick Presets */}
-                  <div className="space-y-2">
+                  {/* General Feedback Comments */}
+                  <div className="space-y-2 pt-2 border-t border-[#E2E8F0]">
                     <label className="block text-xs font-semibold text-[#1E3A5F]">
                       Instructor Evaluation Feedback
                     </label>
 
                     {/* Quick Presets */}
                     <div className="flex flex-wrap gap-1">
-                      {['Outstanding architectural decoupling', 'Need clearer sequence diagrams', 'Good data modeling'].map((preset) => (
+                      {['Outstanding work', 'Well-structured presentation', 'Good data modeling', 'Need clearer diagrams', 'Satisfactory effort'].map((preset) => (
                         <button
                           key={preset}
                           type="button"
@@ -548,7 +540,7 @@ export const AssignmentWorkspace: React.FC = () => {
                       rows={3}
                       value={generalFeedback}
                       onChange={(e) => setGeneralFeedback(e.target.value)}
-                      placeholder="Write personalized critique and suggestions for student improvement..."
+                      placeholder="Write feedback, suggestions, or comments for the student..."
                       className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-xs focus:ring-1 focus:ring-[#0F766E] focus:outline-none"
                     />
                   </div>

@@ -15,7 +15,8 @@ import {
   TrendingUp,
   FileText,
   BookOpen,
-  Plus
+  Plus,
+  BarChart3
 } from 'lucide-react';
 import { getCourseReadiness, getPhysicalClasses } from '../../services/dataService';
 import type { StudentReadiness, PhysicalClass } from '../../types';
@@ -113,6 +114,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onNavigate }
             >
               <FileCheck2 className="w-4 h-4 text-emerald-300" />
               Grading Workspace
+            </button>
+            <button
+              id="teacher-hero-analytics-btn"
+              onClick={() => onNavigate('analytics')}
+              className="px-4 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl text-xs font-semibold backdrop-blur-xs transition flex items-center gap-2 border border-white/20"
+            >
+              <BarChart3 className="w-4 h-4 text-teal-200" />
+              Cohort Analytics & Roster
             </button>
           </div>
         </div>

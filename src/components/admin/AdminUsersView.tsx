@@ -9,14 +9,15 @@ import {
   Briefcase,
   CheckCircle2,
   XCircle,
-  MoreHorizontal
+  MoreHorizontal,
+  Trash2
 } from 'lucide-react';
 import type { User, UserRole } from '../../types';
-import { subscribeToUsers, createUser, addAuditLog } from '../../services/dataService';
+import { subscribeToUsers, createUser, deleteUser, addAuditLog } from '../../services/dataService';
 
 export const AdminUsersView: React.FC = () => {
-  const { addToast, currentUser } = useAuth();
-  const [users, setUsers] = useState<User[]>([]);
+  const { addToast, currentUser, users: authUsers } = useAuth();
+  const [users, setUsers] = useState<User[]>(authUsers || []);
   const [roleFilter, setRoleFilter] = useState<'ALL' | UserRole>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -29,7 +30,17 @@ export const AdminUsersView: React.FC = () => {
   const [rollNo, setRollNo] = useState('');
 
   useEffect(() => {
-    const unsub = subscribeToUsers(setUsers);
+    if (authUsers && authUsers.length > 0) {
+      setUsers(authUsers);
+    }
+  }, [authUsers]);
+
+  useEffect(() => {
+    const unsub = subscribeToUsers((fetched) => {
+      if (fetched && fetched.length > 0) {
+        setUsers(fetched);
+      }
+    });
     return () => unsub();
   }, []);
 
@@ -39,12 +50,13 @@ export const AdminUsersView: React.FC = () => {
 
     try {
       const newUser = await createUser({
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         fullName: fullName.trim(),
         role,
         department,
         status: 'ACTIVE',
-        rollNo: role === 'STUDENT' ? rollNo || `CS-2026-${Math.floor(100 + Math.random() * 900)}` : undefined
+        employeeId: role !== 'STUDENT' ? `EDTE-FAC-${Math.floor(10 + Math.random() * 90)}` : undefined,
+        rollNo: role === 'STUDENT' ? rollNo || `EDTE-2026-${Math.floor(100 + Math.random() * 900)}` : undefined
       });
 
       if (currentUser) {
@@ -69,12 +81,22 @@ export const AdminUsersView: React.FC = () => {
     }
   };
 
+  const studentCount = users.filter((u) => u.role === 'STUDENT').length;
+  const teacherCount = users.filter((u) => u.role === 'TEACHER').length;
+  const adminCount = users.filter((u) => u.role === 'ADMIN').length;
+
   const filtered = users.filter((u) => {
     const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return matchesRole;
+
     const matchesSearch =
-      u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (u.rollNo && u.rollNo.toLowerCase().includes(searchQuery.toLowerCase()));
+      (u.fullName || '').toLowerCase().includes(q) ||
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.rollNo && u.rollNo.toLowerCase().includes(q)) ||
+      (u.employeeId && u.employeeId.toLowerCase().includes(q)) ||
+      (u.department && u.department.toLowerCase().includes(q));
+
     return matchesRole && matchesSearch;
   });
 
@@ -119,19 +141,61 @@ export const AdminUsersView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
-          {(['ALL', 'STUDENT', 'TEACHER', 'ADMIN'] as const).map((r) => (
-            <button
-              key={r}
-              onClick={() => setRoleFilter(r)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
-                roleFilter === r
-                  ? 'bg-[#0F766E] text-white shadow-xs'
-                  : 'bg-[#EEF3F7] text-[#5B6B7C] hover:bg-[#E2E8F0]'
-              }`}
-            >
-              {r === 'ALL' ? 'All Roles' : r === 'STUDENT' ? 'Students' : r === 'TEACHER' ? 'Faculty / Teachers' : 'Admins'}
-            </button>
-          ))}
+          <button
+            onClick={() => setRoleFilter('ALL')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
+              roleFilter === 'ALL'
+                ? 'bg-[#0F766E] text-white shadow-xs'
+                : 'bg-[#EEF3F7] text-[#5B6B7C] hover:bg-[#E2E8F0]'
+            }`}
+          >
+            <span>All Roles</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${roleFilter === 'ALL' ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-700'}`}>
+              {users.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setRoleFilter('STUDENT')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
+              roleFilter === 'STUDENT'
+                ? 'bg-[#0F766E] text-white shadow-xs'
+                : 'bg-[#EEF3F7] text-[#5B6B7C] hover:bg-[#E2E8F0]'
+            }`}
+          >
+            <span>Students</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${roleFilter === 'STUDENT' ? 'bg-white/25 text-white' : 'bg-teal-100 text-[#0F766E]'}`}>
+              {studentCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setRoleFilter('TEACHER')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
+              roleFilter === 'TEACHER'
+                ? 'bg-[#0F766E] text-white shadow-xs'
+                : 'bg-[#EEF3F7] text-[#5B6B7C] hover:bg-[#E2E8F0]'
+            }`}
+          >
+            <span>Faculty / Teachers</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${roleFilter === 'TEACHER' ? 'bg-white/25 text-white' : 'bg-blue-100 text-blue-800'}`}>
+              {teacherCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setRoleFilter('ADMIN')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
+              roleFilter === 'ADMIN'
+                ? 'bg-[#0F766E] text-white shadow-xs'
+                : 'bg-[#EEF3F7] text-[#5B6B7C] hover:bg-[#E2E8F0]'
+            }`}
+          >
+            <span>Admins</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${roleFilter === 'ADMIN' ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-800'}`}>
+              {adminCount}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -150,58 +214,106 @@ export const AdminUsersView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map((user) => (
-                <tr key={user.userId} className="hover:bg-[#F7F9FB] transition">
-                  <td className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-teal-50 text-[#0F766E] font-bold flex items-center justify-center text-xs border border-teal-200">
-                        {user.fullName.charAt(0)}
-                      </div>
-                      <div>
-                        <div className="font-semibold text-[#0F172A]">{user.fullName}</div>
-                        <div className="text-[11px] text-[#5B6B7C]">{user.email}</div>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td className="p-4">
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                        user.role === 'ADMIN'
-                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                          : user.role === 'TEACHER'
-                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                          : 'bg-teal-50 text-teal-700 border border-teal-200'
-                      }`}
-                    >
-                      {user.role}
-                    </span>
-                  </td>
-
-                  <td className="p-4 text-[#5B6B7C]">
-                    {user.department || 'Computer Science & Engineering'}
-                  </td>
-
-                  <td className="p-4 font-mono text-[#0F172A]">
-                    {user.rollNo || (user.role === 'TEACHER' ? 'FAC-802' : 'ADM-001')}
-                  </td>
-
-                  <td className="p-4">
-                    <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 font-medium">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Active
-                    </span>
-                  </td>
-
-                  <td className="p-4 text-right">
-                    <button
-                      onClick={() => addToast(`User ${user.fullName} permissions verified`, 'info')}
-                      className="px-2.5 py-1 text-xs border border-[#E2E8F0] rounded-lg hover:bg-[#EEF3F7] text-[#1E3A5F] transition"
-                    >
-                      Manage
-                    </button>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-[#5B6B7C]">
+                    <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="font-semibold text-sm text-[#1E3A5F]">No users found</p>
+                    <p className="text-xs mt-1">No users match your current filter or search criteria.</p>
+                    {(roleFilter !== 'ALL' || searchQuery) && (
+                      <button
+                        onClick={() => {
+                          setRoleFilter('ALL');
+                          setSearchQuery('');
+                        }}
+                        className="mt-3 px-3 py-1 bg-teal-50 text-[#0F766E] border border-teal-200 rounded-lg text-xs font-medium hover:bg-teal-100 transition"
+                      >
+                        Reset Filters
+                      </button>
+                    )}
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filtered.map((user) => (
+                  <tr key={user.userId} className="hover:bg-[#F7F9FB] transition">
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-teal-50 text-[#0F766E] font-bold flex items-center justify-center text-xs border border-teal-200">
+                          {user.fullName.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="font-semibold text-[#0F172A]">{user.fullName}</div>
+                          <div className="text-[11px] text-[#5B6B7C]">{user.email}</div>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="p-4">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          user.role === 'ADMIN'
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : user.role === 'TEACHER'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                            : 'bg-teal-50 text-teal-700 border border-teal-200'
+                        }`}
+                      >
+                        {user.role}
+                      </span>
+                    </td>
+
+                    <td className="p-4 text-[#5B6B7C]">
+                      {user.department || 'Educational Technology and Engineering'}
+                    </td>
+
+                    <td className="p-4 font-mono text-[#0F172A]">
+                      {user.rollNo || user.employeeId || '—'}
+                      {user.section && <span className="ml-1 text-[10px] font-sans text-[#5B6B7C] font-normal">(Sec {user.section})</span>}
+                    </td>
+
+                    <td className="p-4">
+                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 font-medium">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Active
+                      </span>
+                    </td>
+
+                    <td className="p-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => addToast(`User ${user.fullName} (${user.role}) details verified`, 'info')}
+                          className="px-2.5 py-1 text-xs border border-[#E2E8F0] rounded-lg hover:bg-[#EEF3F7] text-[#1E3A5F] transition"
+                        >
+                          Details
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (user.userId === currentUser?.userId) {
+                              addToast('You cannot delete your own active administrator account.', 'error');
+                              return;
+                            }
+                            if (window.confirm(`Are you sure you want to permanently delete user "${user.fullName}" (${user.email})?`)) {
+                              await deleteUser(user.userId);
+                              await addAuditLog(
+                                currentUser?.userId || 'system',
+                                currentUser?.fullName || 'Admin',
+                                currentUser?.role || 'ADMIN',
+                                'DELETE_USER',
+                                'users',
+                                user.userId
+                              );
+                              addToast(`User ${user.fullName} was deleted successfully.`, 'success');
+                            }
+                          }}
+                          className="p-1 text-xs border border-rose-200 text-rose-600 rounded-lg hover:bg-rose-50 transition"
+                          title="Delete User"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

@@ -10,7 +10,7 @@ export interface User {
   avatarUrl?: string;
   rollNo?: string;
   employeeId?: string;
-  semester?: number;
+  semester?: number | string;
   section?: string;
   phone?: string;
   createdAt: string;
@@ -255,6 +255,39 @@ export interface NotificationItem {
   isRead: boolean;
   link?: string;
   createdAt: string;
+}
+
+export interface CourseRegistration {
+  registrationId: string;
+  courseId: string;
+  studentId: string;
+  studentName: string;
+  rollNo?: string;
+  email: string;
+  department: string;
+  semester: number;
+  registeredAt: string;
+  status: 'ACTIVE' | 'DROPPED';
+}
+
+export interface CourseFeedback {
+  feedbackId: string;
+  courseId: string;
+  studentId: string;
+  studentName: string;
+  rollNo?: string;
+  studentRollNo?: string;
+  rating: number; // 1 to 5
+  category: 'LECTURE' | 'ASSIGNMENT' | 'PHYSICAL_CLASS' | 'GENERAL' | 'LECTURE_CLARITY' | 'PACE' | 'ASSIGNMENT_DIFFICULTY';
+  subject?: string;
+  message: string;
+  isAnonymous?: boolean;
+  reply?: string;
+  replyBy?: string;
+  repliedAt?: string;
+  createdAt: string;
+  teacherResponse?: string;
+  respondedAt?: string;
 }
 
 export interface AuditLog {

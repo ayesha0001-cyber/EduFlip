@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { BookOpen, X, Sparkles, CheckCircle2 } from 'lucide-react';
+import { BookOpen, X, Sparkles, CheckCircle2, Calendar } from 'lucide-react';
 import { createCourse, addAuditLog } from '../../services/dataService';
+import { SEMESTERS, formatSemesterLabel } from '../../utils/semester';
 
 interface CreateCourseModalProps {
   isOpen: boolean;
@@ -9,14 +10,20 @@ interface CreateCourseModalProps {
 }
 
 export const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ isOpen, onClose }) => {
-  const { currentUser, role, addToast, setSelectedCourse } = useAuth();
+  const { currentUser, role, addToast, setSelectedCourse, activeSemester } = useAuth();
   const [code, setCode] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [department, setDepartment] = useState('Educational Technology and Engineering');
-  const [semester, setSemester] = useState('Fall 2026');
+  const [semesterNumber, setSemesterNumber] = useState<number>(activeSemester || 6);
   const [credits, setCredits] = useState(3);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (activeSemester) {
+      setSemesterNumber(activeSemester);
+    }
+  }, [activeSemester, isOpen]);
 
   if (!isOpen) return null;
 
@@ -29,12 +36,13 @@ export const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ isOpen, on
 
     setIsSubmitting(true);
     try {
+      const formattedSemester = formatSemesterLabel(semesterNumber);
       const newCourse = await createCourse({
         code: code.trim().toUpperCase(),
         title: title.trim(),
         description: description.trim(),
         departmentId: department,
-        semester,
+        semester: formattedSemester,
         credits: Number(credits) || 3,
         teacherId: currentUser?.userId || 'faculty-1',
         teacherName: currentUser?.fullName || 'Faculty Instructor',
@@ -54,7 +62,7 @@ export const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ isOpen, on
       }
 
       setSelectedCourse(newCourse);
-      addToast(`Course ${newCourse.code}: ${newCourse.title} created successfully!`, 'success');
+      addToast(`Course ${newCourse.code}: ${newCourse.title} created for ${formattedSemester}! Only ${formattedSemester} students will see it.`, 'success');
       onClose();
       setCode('');
       setTitle('');
@@ -144,15 +152,29 @@ export const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ isOpen, on
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-[#0F172A] mb-1">Semester</label>
-              <input
-                type="text"
-                value={semester}
-                onChange={(e) => setSemester(e.target.value)}
-                placeholder="e.g. Fall 2026"
-                className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] focus:outline-hidden focus:ring-2 focus:ring-[#0F766E]/20 focus:border-[#0F766E]"
-              />
+              <label className="block font-semibold text-[#0F172A] mb-1 flex items-center justify-between">
+                <span>Target Semester *</span>
+                <span className="text-[10px] text-[#0F766E] font-normal">Cohort Filter</span>
+              </label>
+              <select
+                value={semesterNumber}
+                onChange={(e) => setSemesterNumber(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white font-medium text-[#1E3A5F] focus:outline-hidden focus:ring-2 focus:ring-[#0F766E]/20 focus:border-[#0F766E]"
+              >
+                {SEMESTERS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
             </div>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-blue-50/70 border border-blue-200 text-[#1E3A5F] text-[11px] flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-[#0F766E] shrink-0" />
+            <span>
+              <strong>Cohort Guarantee:</strong> Only students registered in <strong>Semester {semesterNumber}</strong> will see and access this course, modules, and flipped assignments.
+            </span>
           </div>
 
           <div>
