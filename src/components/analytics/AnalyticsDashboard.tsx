@@ -50,7 +50,66 @@ export const AnalyticsDashboard: React.FC = () => {
   // Student Individual Progress State (Student)
   const [studentProgress, setStudentProgress] = useState<any>(null);
 
-  fetchAnalytics
+  const fetchAnalytics = async () => {
+    if (!selectedCourse) return;
+    setLoading(true);
+    try {
+      if (role === 'STUDENT' && currentUser) {
+        const prog = await getStudentComprehensiveProgress(currentUser.userId, selectedCourse.courseId);
+
+        setStudentProgress({
+          attendance: {
+            percentage: prog.attendancePercentage,
+            present: prog.attendedClasses,
+            total: prog.totalClasses
+          },
+          videoWatchRate: prog.avgVideoWatchPct,
+          materialsDownloaded: prog.totalMaterials > 0 && prog.materialsOpenedCount >= prog.totalMaterials,
+          preQuizScore: null, // service doesn't currently split PRE vs POST attempts
+          postQuizScore: null,
+          assignments: {
+            submitted: prog.assignmentsSubmittedCount,
+            totalGiven: prog.totalAssignments
+          },
+          readinessScore: Math.round(
+            (prog.attendancePercentage + prog.avgVideoWatchPct + prog.avgQuizScorePct) / 3
+          )
+        });
+      } else {
+        const cohort = await getCourseCohortAnalytics(selectedCourse.courseId);
+
+        setCohortData({
+          avgAttendancePct: cohort.avgAttendanceRate,
+          avgVideoWatchPct: cohort.avgVideoWatchRate,
+          materialsEngagementPct: cohort.materialEngagementRate,
+          avgSubmissionPct: cohort.assignmentSubmissionRate,
+          totalAssignments: cohort.students[0]?.totalAssignments || 0,
+          moduleGains: [], // not computed by the backend yet — chart will render empty
+          weeklyAttendance: cohort.weeklyAttendance.map((w) => ({
+            week: w.weekLabel,
+            attendance: w.complianceRate
+          })),
+          studentsList: cohort.students.map((s) => ({
+            studentId: s.studentId,
+            studentName: s.studentName,
+            rollNo: s.rollNo,
+            attendancePct: s.attendanceRate,
+            videoWatchPct: s.avgVideoWatchPct,
+            materialsDownloadedPct: s.materialsPct,
+            quizAvgPct: s.avgQuizScore,
+            assignmentsSubmitted: s.assignmentsSubmittedCount,
+            totalAssignments: s.totalAssignments
+          }))
+        });
+      }
+    } catch (err) {
+      console.error('Error loading analytics:', err);
+      addToast('Failed to load analytics data.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchAnalytics();
   }, [selectedCourse, role, currentUser]);
@@ -296,7 +355,7 @@ export const AnalyticsDashboard: React.FC = () => {
                 </div>
               </div>
               <div className="text-2xl font-bold text-[#1E3A5F]">
-                {cohortData?.avgVideoWatchPct || 84}%
+                {cohortData?.avgVideoWatchPct ?? 0}%
               </div>
               <div className="flex items-center gap-1.5 mt-2 text-[11px] text-emerald-600 font-medium">
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -312,7 +371,7 @@ export const AnalyticsDashboard: React.FC = () => {
                 </div>
               </div>
               <div className="text-2xl font-bold text-[#1E3A5F]">
-                {cohortData?.materialsEngagementPct || 91}%
+                {cohortData?.materialsEngagementPct ?? 0}%
               </div>
               <div className="flex items-center gap-1.5 mt-2 text-[11px] text-indigo-600 font-medium">
                 <span>Lecture slides & notes engagement</span>
@@ -327,7 +386,7 @@ export const AnalyticsDashboard: React.FC = () => {
                 </div>
               </div>
               <div className="text-2xl font-bold text-[#1E3A5F]">
-                {cohortData?.avgAttendancePct || 92}%
+                {cohortData?.avgAttendancePct ?? 0}%
               </div>
               <div className="flex items-center gap-1.5 mt-2 text-[11px] text-emerald-600 font-medium">
                 <ArrowUpRight className="w-3.5 h-3.5" />
@@ -343,10 +402,10 @@ export const AnalyticsDashboard: React.FC = () => {
                 </div>
               </div>
               <div className="text-2xl font-bold text-[#1E3A5F]">
-                {cohortData?.avgSubmissionPct || 86}%
+                {cohortData?.avgSubmissionPct ?? 0}%
               </div>
               <div className="flex items-center gap-1.5 mt-2 text-[11px] text-[#5B6B7C]">
-                <span>{cohortData?.totalAssignments || 2} assignments active</span>
+                <span>{cohortData?.totalAssignments ?? 0} assignments active</span>
               </div>
             </div>
           </div>
